@@ -1,0 +1,214 @@
+package global.govstack.processing.service.metadata;
+
+import org.joget.commons.util.LogUtil;
+import global.govstack.processing.exception.ConfigurationException;
+import org.yaml.snakeyaml.Yaml;
+
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.*;
+
+/**
+ * Service to load and manage YAML metadata for GovStack registration services
+ */
+public class YamlMetadataService {
+    private static final String CLASS_NAME = YamlMetadataService.class.getName();
+    private static final String METADATA_FILE = "docs-metadata/services.yml";
+
+    private Map<String, Object> serviceMetadata;
+    private Map<String, Object> formMappings;
+    private String serviceId;
+
+    /**
+     * Load the YAML metadata file
+     * @param serviceId The service ID to load metadata for
+     * @throws ConfigurationException if metadata cannot be loaded
+     */
+    public void loadMetadata(String serviceId) throws ConfigurationException {
+        this.serviceId = serviceId;
+
+        try {
+            InputStream inputStream = null;
+
+            // Try to load from classpath first (for deployed plugin)
+            inputStream = getClass().getClassLoader().getResourceAsStream(METADATA_FILE);
+            if (inputStream != null) {
+                LogUtil.info(CLASS_NAME, "Loading metadata from classpath: " + METADATA_FILE);
+            } else {
+                // Try to load from file system as fallback (for development)
+                Path metadataPath = Paths.get(METADATA_FILE);
+                if (Files.exists(metadataPath)) {
+                    LogUtil.info(CLASS_NAME, "Loading metadata from file: " + metadataPath.toAbsolutePath());
+                    inputStream = new FileInputStream(metadataPath.toFile());
+                } else {
+                    throw new ConfigurationException("Metadata file not found: " + METADATA_FILE);
+                }
+            }
+
+            Yaml yaml = new Yaml();
+            Map<String, Object> yamlData = yaml.load(inputStream);
+
+            // Extract service metadata
+            serviceMetadata = (Map<String, Object>) yamlData.get("service");
+            if (serviceMetadata == null) {
+                throw new ConfigurationException("Service metadata not found in YAML");
+            }
+
+            // Validate service ID
+            String configuredServiceId = (String) serviceMetadata.get("id");
+            if (!serviceId.equals(configuredServiceId)) {
+                throw new ConfigurationException("Service ID mismatch. Expected: " + serviceId + ", Found: " + configuredServiceId);
+            }
+
+            // Extract form mappings
+            formMappings = (Map<String, Object>) yamlData.get("formMappings");
+            if (formMappings == null) {
+                throw new ConfigurationException("Form mappings not found in YAML");
+            }
+
+            LogUtil.info(CLASS_NAME, "Successfully loaded metadata for service: " + serviceId);
+
+        } catch (Exception e) {
+            if (e instanceof ConfigurationException) {
+                throw (ConfigurationException) e;
+            }
+            throw new ConfigurationException("Error loading metadata: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Get field mappings for a specific form section
+     * @param sectionName The name of the form section (e.g., "farmerBasicInfo")
+     * @return List of field mappings for the section
+     */
+    public List<Map<String, Object>> getFieldMappings(String sectionName) {
+        if (formMappings == null) {
+            return new ArrayList<>();
+        }
+
+        Map<String, Object> section = (Map<String, Object>) formMappings.get(sectionName);
+        if (section == null) {
+            return new ArrayList<>();
+        }
+
+        Object fields = section.get("fields");
+        if (fields instanceof List) {
+            return (List<Map<String, Object>>) fields;
+        }
+
+        return new ArrayList<>();
+    }
+
+    /**
+     * Get all form sections
+     * @return Map of all form sections
+     */
+    public Map<String, Object> getAllFormMappings() {
+        return formMappings != null ? formMappings : new HashMap<>();
+    }
+
+    /**
+     * Get array/grid mappings (for household members, crops, etc.)
+     * @return List of array field configurations
+     */
+    public List<Map<String, Object>> getArrayMappings() {
+        List<Map<String, Object>> arrayMappings = new ArrayList<>();
+
+        if (formMappings != null) {
+            for (Map.Entry<String, Object> entry : formMappings.entrySet()) {
+                Map<String, Object> section = (Map<String, Object>) entry.getValue();
+                if (section != null && "array".equals(section.get("type"))) {
+                    Map<String, Object> arrayConfig = new HashMap<>();
+                    arrayConfig.put("sectionName", entry.getKey());
+                    arrayConfig.put("govstackPath", section.get("govstack"));
+                    arrayConfig.put("jogetGrid", section.get("jogetGrid"));
+                    arrayConfig.put("fields", section.get("fields"));
+                    arrayMappings.add(arrayConfig);
+                }
+            }
+        }
+
+        return arrayMappings;
+    }
+
+    /**
+     * Get value mapping for a specific field
+     * @param jogetField The Joget field name
+     * @return Map of value mappings, or null if not found
+     */
+    public Map<String, String> getValueMapping(String jogetField) {
+        for (Map.Entry<String, Object> entry : formMappings.entrySet()) {
+            Map<String, Object> section = (Map<String, Object>) entry.getValue();
+            List<Map<String, Object>> fields = (List<Map<String, Object>>) section.get("fields");
+
+            if (fields != null) {
+                for (Map<String, Object> field : fields) {
+                    if (jogetField.equals(field.get("joget"))) {
+                        Object valueMapping = field.get("valueMapping");
+                        if (valueMapping instanceof Map) {
+                            Map<String, String> result = new HashMap<>();
+                            Map<?, ?> map = (Map<?, ?>) valueMapping;
+                            for (Map.Entry<?, ?> mapEntry : map.entrySet()) {
+                                result.put(String.valueOf(mapEntry.getKey()), String.valueOf(mapEntry.getValue()));
+                            }
+                            return result;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get transformation type for a field
+     * @param jogetField The Joget field name
+     * @return The transformation type, or null if not found
+     */
+    public String getTransformation(String jogetField) {
+        for (Map.Entry<String, Object> entry : formMappings.entrySet()) {
+            Map<String, Object> section = (Map<String, Object>) entry.getValue();
+            List<Map<String, Object>> fields = (List<Map<String, Object>>) section.get("fields");
+
+            if (fields != null) {
+                for (Map<String, Object> field : fields) {
+                    if (jogetField.equals(field.get("joget"))) {
+                        return (String) field.get("transform");
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Check if the metadata is loaded
+     * @return true if metadata is loaded
+     */
+    public boolean isLoaded() {
+        return serviceMetadata != null && formMappings != null;
+    }
+
+    /**
+     * Get the configured service ID
+     * @return The service ID
+     */
+    public String getServiceId() {
+        return serviceId;
+    }
+
+    /**
+     * Get the form ID from service metadata
+     * @return The form ID, or the service ID if not specified
+     */
+    public String getFormId() {
+        if (serviceMetadata != null && serviceMetadata.containsKey("formId")) {
+            return (String) serviceMetadata.get("formId");
+        }
+        // Fall back to service ID if formId not specified
+        return serviceId;
+    }
+}
