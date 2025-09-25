@@ -98,9 +98,20 @@ public class MultiFormSubmissionManager {
         try {
             LogUtil.info(CLASS_NAME, "Creating parent record in form: " + parentFormId + " with primary key: " + primaryKey);
 
-            // Create minimal data for parent form (just the ID)
+            // Create parent record with reference fields that link to sub-forms
             Map<String, String> parentData = new HashMap<>();
-            // Add any minimal required fields for the parent form if needed
+
+            // Populate reference fields that link to sub-forms
+            // These fields should contain the primary key value to reference the sub-form records
+            parentData.put("basic_data", primaryKey);
+            parentData.put("household_data", primaryKey);
+            parentData.put("location_data", primaryKey);
+            parentData.put("activities_data", primaryKey);
+            parentData.put("crops_livestock", primaryKey);  // Fixed field name
+            parentData.put("income_data", primaryKey);
+            parentData.put("declaration", primaryKey);  // Fixed field name
+
+            LogUtil.info(CLASS_NAME, "Populating parent record with reference fields pointing to: " + primaryKey);
 
             return saveToForm(parentFormId, parentData, primaryKey);
         } catch (Exception e) {

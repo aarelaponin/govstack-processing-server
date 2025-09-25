@@ -211,4 +211,85 @@ public class YamlMetadataService {
         // Fall back to service ID if formId not specified
         return serviceId;
     }
+
+    /**
+     * Get the parent form ID from service configuration
+     * @return The parent form ID, defaults to "farmerRegistrationForm" for backward compatibility
+     */
+    public String getParentFormId() {
+        Map<String, Object> serviceConfig = getServiceConfig();
+        if (serviceConfig != null && serviceConfig.containsKey("parentFormId")) {
+            return (String) serviceConfig.get("parentFormId");
+        }
+        // Default for backward compatibility
+        return "farmerRegistrationForm";
+    }
+
+    /**
+     * Get the service configuration section
+     * @return The serviceConfig map or null if not present
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getServiceConfig() {
+        if (serviceMetadata != null && serviceMetadata.containsKey("serviceConfig")) {
+            return (Map<String, Object>) serviceMetadata.get("serviceConfig");
+        }
+        return null;
+    }
+
+    /**
+     * Get the section to form mapping from service configuration
+     * @return Map of section names to form IDs, or null if not configured
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, String> getSectionToFormMap() {
+        Map<String, Object> serviceConfig = getServiceConfig();
+        if (serviceConfig != null && serviceConfig.containsKey("sectionToFormMap")) {
+            return (Map<String, String>) serviceConfig.get("sectionToFormMap");
+        }
+        return null;
+    }
+
+    /**
+     * Get grid configuration for a specific grid
+     * @param gridName The name of the grid
+     * @return Map containing grid configuration (formId, parentField) or null
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, String> getGridConfig(String gridName) {
+        Map<String, Object> serviceConfig = getServiceConfig();
+        if (serviceConfig != null && serviceConfig.containsKey("gridMappings")) {
+            Map<String, Object> gridMappings = (Map<String, Object>) serviceConfig.get("gridMappings");
+            if (gridMappings != null && gridMappings.containsKey(gridName)) {
+                return (Map<String, String>) gridMappings.get(gridName);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get the form ID for a specific grid
+     * @param gridName The name of the grid
+     * @return The form ID for the grid, or null if not configured
+     */
+    public String getGridFormId(String gridName) {
+        Map<String, String> gridConfig = getGridConfig(gridName);
+        if (gridConfig != null && gridConfig.containsKey("formId")) {
+            return gridConfig.get("formId");
+        }
+        return null;
+    }
+
+    /**
+     * Get the parent field name for a specific grid
+     * @param gridName The name of the grid
+     * @return The parent field name, or null if not configured
+     */
+    public String getGridParentField(String gridName) {
+        Map<String, String> gridConfig = getGridConfig(gridName);
+        if (gridConfig != null && gridConfig.containsKey("parentField")) {
+            return gridConfig.get("parentField");
+        }
+        return null;
+    }
 }

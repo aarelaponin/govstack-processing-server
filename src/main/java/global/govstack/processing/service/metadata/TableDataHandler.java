@@ -23,17 +23,34 @@ public class TableDataHandler {
     private final AppService appService;
     private final String appId;
     private final String appVersion;
+    private YamlMetadataService metadataService;  // Optional for configuration support
 
     /**
      * Constructor
      * @throws FormSubmissionException if initialization fails
      */
     public TableDataHandler() throws FormSubmissionException {
+        this(null);  // Use hardcoded defaults
+    }
+
+    /**
+     * Constructor with optional metadata service for configuration support
+     * @param metadataService Optional metadata service for reading configuration
+     * @throws FormSubmissionException if initialization fails
+     */
+    public TableDataHandler(YamlMetadataService metadataService) throws FormSubmissionException {
         try {
             AppDefinition appDef = AppUtil.getCurrentAppDefinition();
             this.appId = appDef.getId();
             this.appVersion = appDef.getVersion().toString();
             this.appService = (AppService) AppUtil.getApplicationContext().getBean("appService");
+            this.metadataService = metadataService;
+
+            if (metadataService != null) {
+                LogUtil.info(CLASS_NAME, "TableDataHandler initialized with configuration support");
+            } else {
+                LogUtil.info(CLASS_NAME, "TableDataHandler using hardcoded defaults");
+            }
         } catch (Exception e) {
             throw new FormSubmissionException("Failed to initialize TableDataHandler: " + e.getMessage(), e);
         }
@@ -141,9 +158,17 @@ public class TableDataHandler {
      * @return The Joget form ID
      */
     private String getGridFormId(String gridName) {
-        // Map grid names to Joget form IDs
-        // These IDs match the actual form definitions in doc-forms
+        // First try to get from configuration if available
+        if (metadataService != null) {
+            String configFormId = metadataService.getGridFormId(gridName);
+            if (configFormId != null && !configFormId.isEmpty()) {
+                LogUtil.info(CLASS_NAME, "Using configured form ID for grid " + gridName + ": " + configFormId);
+                return configFormId;
+            }
+        }
 
+        // Fall back to hardcoded defaults for backward compatibility
+        // These IDs match the actual form definitions in doc-forms
         switch (gridName) {
             case "householdMembers":
                 return "householdMemberForm"; // Matches farmers-01.04.json formDefId
@@ -167,9 +192,17 @@ public class TableDataHandler {
      * @return The field name that stores the parent ID
      */
     private String getParentFieldName(String gridName) {
-        // Map grid names to their parent field names
-        // These should match the actual column names in the database tables
+        // First try to get from configuration if available
+        if (metadataService != null) {
+            String configParentField = metadataService.getGridParentField(gridName);
+            if (configParentField != null && !configParentField.isEmpty()) {
+                LogUtil.info(CLASS_NAME, "Using configured parent field for grid " + gridName + ": " + configParentField);
+                return configParentField;
+            }
+        }
 
+        // Fall back to hardcoded defaults for backward compatibility
+        // These should match the actual column names in the database tables
         switch (gridName) {
             case "householdMembers":
                 return "farmer_id"; // The field that links to parent farmer

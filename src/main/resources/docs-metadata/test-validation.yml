@@ -1,589 +1,313 @@
-# Expected Database Records for test-data.json Processing
-# Generated from Farmers Registry Plugin - services.yml mapping analysis
-# Test Data ID: farmer-002 (Mamosa Elizabeth Motlomelo)
-# Processing Date: 2025-01-22
+# ============================================================================
+# REFERENCE DOCUMENTATION - Manual Validation Specification
+# ============================================================================
+# Purpose: This file serves as reference documentation showing the expected
+#          database state after processing test-data.json through the plugin.
+#
+# NOTE: This is a MANUAL specification kept for documentation purposes.
+#       For actual validation, use the automated validation framework at:
+#       /Users/aarelaponin/PycharmProjects/dev/gam/joget_validator
+#       which generates validation specs automatically from services.yml
+# ============================================================================
+#
+# Test Validation Specification - Aligned with test-data.json
+# Updated: 2025-09-25 to match actual test data for farmer-002 (Mamosa Elizabeth Motlomelo)
+# Based on verified table and column names from form definitions
 
-metadata:
-  test_case: "farmer-002"
-  farmer_name: "Mamosa Elizabeth Motlomelo"
-  national_id: "8712248901234"
-  total_tables: 10
-  total_records: 16
-  main_form_records: 7
-  grid_records: 9
+validation:
+  description: "Database validation for farmer registration API submission"
+  testDataFile: "test-data.json"
 
-summary:
-  tables_created: 10
-  records_created: 16
-  breakdown:
-    main_forms: 7
-    household_members: 3
-    crop_management: 3
-    livestock_details: 3
+  # Expected records in each table after processing
+  tables:
+    # Main form tables
+    farmer_basic_data:
+      expectedRecords: 1
+      primaryKey: "id"
+      validations:
+        - field: "c_national_id"
+          expectedValue: "8712248901234"
+        - field: "c_first_name"
+          expectedValue: "Mamosa"
+        - field: "c_last_name"
+          expectedValue: "Motlomelo"
+        - field: "c_gender"
+          expectedValue: "female"
+        - field: "c_date_of_birth"
+          expectedValue: "1987-12-24"
+        - field: "c_marital_status"
+          expectedValue: "single"
+        - field: "c_mobile_number"
+          expectedValue: "+26659876543"
+        - field: "c_email_address"
+          expectedValue: "mamosa.motlomelo@gmail.com"
+        - field: "c_member_of_cooperative"
+          expectedValue: "no"
+        - field: "c_extension_officer_name"
+          expectedValue: "Sarah Mofokeng"
 
-# =============================================================================
-# MAIN FORM TABLES (1 record each)
-# =============================================================================
+    farm_location:
+      expectedRecords: 1
+      primaryKey: "id"
+      linkField: "c_parent_id"  # Links to main farmer ID
+      validations:
+        - field: "c_district"
+          expectedValue: "berea"
+        - field: "c_village"
+          expectedValue: "Ha Nkau"
+        - field: "c_communityCouncil"
+          expectedValue: "Machache Community Council"
+        - field: "c_residency_type"
+          expectedValue: "rural"
+        - field: "c_yearsInArea"
+          expectedValue: "15"
+        - field: "c_gpsLatitude"
+          expectedValue: "-29.195833"
+        - field: "c_gpsLongitude"
+          expectedValue: "27.756944"
 
-main_form_tables:
+    farmer_registry:  # Used by agricultural activities AND household sections
+      expectedRecords: 1
+      primaryKey: "id"
+      linkField: "c_parent_id"
+      validations:
+        # Agricultural activities fields
+        - field: "c_cropProduction"
+          expectedValue: "yes"
+        - field: "c_livestockProduction"
+          expectedValue: "1"  # Yes
+        - field: "c_canReadWrite"
+          expectedValue: "yes"
+        - field: "c_mainSourceFarmLabour"
+          expectedValue: "1"  # Family
+        - field: "c_mainSourceLivelihood"
+          expectedValue: "farming"
+        - field: "c_agriculturalManagementSkills"
+          expectedValue: "intermediate"
+        - field: "c_mainSourceAgriculturalInfo"
+          expectedValue: "extension_services"
+        - field: "c_conservationPractices"
+          expectedValue: "minimum_tillage,crop_rotation,cover_cropping"
+        - field: "c_shocks_hazards"
+          expectedValue: "drought,flood,pests"
 
-  # Tab 01.01 - Basic Information
-  app_fd_farmer_basic:
-    record_count: 1
-    primary_key: "c_farmer_id"
-    primary_key_value: "farmer-002"
-    expected_fields:
-      c_farmer_id: "farmer-002"
-      c_national_id: "8712248901234"
-      c_first_name: "Mamosa"
-      c_last_name: "Motlomelo"
-      c_gender: "female"
-      c_date_of_birth: "1987-12-24"
-      c_marital_status: "single"
-      c_preferred_language: "sesotho"
-      c_mobile_number: "+26659876543"
-      c_email_address: "mamosa.motlomelo@gmail.com"
-      c_extension_officer_name: "Sarah Mofokeng"
-      c_member_of_cooperative: "no"
-      c_cooperative_name: ""
-    source_mapping:
-      govstack_paths:
-        - "identifiers[0].value"
-        - "name.given[0]"
-        - "name.family"
-        - "gender"
-        - "birthDate"
-        - "maritalStatus"
-        - "communication[0].language"
-        - "telecom[0].value"
-        - "telecom[1].value"
-      form_id: "farmerBasicInfo"
+    farmer_crop_livestck:
+      expectedRecords: 1
+      primaryKey: "id"
+      linkField: "c_parent_id"
+      validations:
+        - field: "c_hasLivestock"
+          expectedValue: "yes"
 
-  # Tab 01.02 - Location and Farm
-  app_fd_farmer_location:
-    record_count: 1
-    primary_key: "c_farmer_id"
-    primary_key_value: "farmer-002"
-    expected_fields:
-      c_farmer_id: "farmer-002"
-      c_district: "berea"
-      c_village: "Ha Nkau"
-      c_community_council: "Machache Community Council"
-      c_agro_ecological_zone: "foothills"
-      c_residency_type: "rural"
-      c_years_in_area: 15
-      c_gps_latitude: "-29.195833"
-      c_gps_longitude: "27.756944"
-      c_owned_rented_land: 2.5
-      c_total_available_land: 2.5
-      c_cultivated_land: 2.0
-      c_conservation_agriculture_land: 0.8
-      c_access_to_services: "45"
-      c_distance_water_source: "10"
-      c_distance_primary_school: "15"
-      c_distance_public_hospital: "90"
-      c_distance_livestock_market: "120"
-      c_distance_agricultural_market: "60"
-      c_distance_public_transport: "30"
-    source_mapping:
-      govstack_paths:
-        - "address[0].district"
-        - "address[0].city"
-        - "address[0].line[0]"
-        - "address[0].extension.agroEcologicalZone"
-        - "address[0].extension.residencyType"
-        - "address[0].extension.yearsInArea"
-      form_id: "farmerLocation"
+    farmer_income:
+      expectedRecords: 1
+      primaryKey: "id"
+      linkField: "c_parent_id"
+      validations:
+        - field: "c_mainSourceIncome"
+          expectedValue: "crop_sales"
+        - field: "c_income_sources"
+          expectedValue: "crop_sales,livestock_sales,remittances"
+        - field: "c_gainfulEmployment"
+          expectedValue: "no"
+        - field: "c_averageAnnualIncome"
+          expectedValue: "25000"
+        - field: "c_monthlyExpenditure"
+          expectedValue: "1500"
+        - field: "c_supportProgram"
+          expectedValue: "subsidized_inputs,school_feeding"
+        - field: "c_everOnISP"
+          expectedValue: "yes"
+        - field: "c_creditDefault"
+          expectedValue: "no"
 
-  # Tab 01.03 - Agricultural Activities
-  app_fd_farmer_agric:
-    record_count: 1
-    primary_key: "c_farmer_id"
-    primary_key_value: "farmer-002"
-    expected_fields:
-      c_farmer_id: "farmer-002"
-      c_crop_production: "yes"
-      c_livestock_production: "1"
-      c_can_read_write: "yes"
-      c_main_source_farm_labour: "family"
-      c_main_source_livelihood: "mixed"
-      c_agricultural_mgmt_skills: "college_diploma"
-      c_main_source_agric_info: "radio"
-      c_conservation_practices: "minimum_tillage"
-      c_conservation_practices_other: "Contour farming and terracing on slopes"
-      c_shocks_hazards: "frost"
-      c_other_hazards: "Late rains affected planting schedule"
-      c_coping_mechanisms: "Used drought-resistant varieties, reduced area planted, sold some livestock to buy food"
-    source_mapping:
-      govstack_paths:
-        - "extension.agriculturalActivities.engagedInCropProduction"
-        - "extension.agriculturalActivities.engagedInLivestockProduction"
-        - "extension.agriculturalActivities.canReadWrite"
-        - "extension.agriculturalActivities.mainSourceFarmLabour"
-        - "extension.agriculturalActivities.mainSourceLivelihood"
-        - "extension.agriculturalActivities.agriculturalManagementSkills"
-        - "extension.agriculturalActivities.mainSourceAgriculturalInfo"
-      form_id: "farmerAgriculture"
+    farmer_declaration:
+      expectedRecords: 1
+      primaryKey: "id"
+      linkField: "c_parent_id"
+      validations:
+        - field: "c_declarationConsent"
+          expectedValue: "consent_given,data_usage_agreed,terms_accepted"
+        - field: "c_declarationFullName"
+          expectedValue: "John Doe"
+        - field: "c_field13"  # Declaration date
+          expectedValue: "2024-01-15"
+        - field: "c_registrationStation"
+          expectedValue: "Maseru District Office"
+        - field: "c_registrationChannel"
+          expectedValue: "in_person"
 
-  # Tab 01.04 - Household Container
-  app_fd_farmer_household:
-    record_count: 1
-    primary_key: "c_farmer_id"
-    primary_key_value: "farmer-002"
-    expected_fields:
-      c_farmer_id: "farmer-002"
-      c_household_key: "farmer-002"
-      c_parent_id: null
-    form_id: "farmerHousehold"
-    contains_grid: "householdMembers"
+    # Grid/Sub-tables with parent-child relationships
+    household_members:
+      expectedRecords: 3  # Based on actual test data
+      primaryKey: "id"
+      parentField: "c_farmer_id"  # Links to parent farmer
+      records:
+        - index: 0
+          validations:
+            - field: "c_memberName"
+              expectedValue: "Motlomelo, Mamosa Elizabeth"
+            - field: "c_sex"
+              expectedValue: "female"
+            - field: "c_date_of_birth"
+              expectedValue: "1987-12-24"
+            - field: "c_orphanhoodStatus"
+              expectedValue: "both_alive"
+            - field: "c_participatesInAgriculture"
+              expectedValue: "1"
+            - field: "c_disability"
+              expectedValue: "none"
+            - field: "c_chronicallyIll"
+              expectedValue: "2"
 
-  # Tab 01.05 - Crops and Livestock Container
-  app_fd_farmer_crop_livestck:
-    record_count: 1
-    primary_key: "c_farmer_id"
-    primary_key_value: "farmer-002"
-    expected_fields:
-      c_farmer_id: "farmer-002"
-      c_has_livestock: "yes"
-      c_crops_livestock_key: "farmer-002"
-      c_parent_id: null
-    form_id: "farmerCropsLivestock"
-    contains_grids:
-      - "cropManagement"
-      - "livestockDetails"
+        - index: 1
+          validations:
+            - field: "c_memberName"
+              expectedValue: "Motlomelo, Teboho"
+            - field: "c_sex"
+              expectedValue: "male"
+            - field: "c_date_of_birth"
+              expectedValue: "2010-06-15"
+            - field: "c_orphanhoodStatus"
+              expectedValue: "both_alive"
+            - field: "c_participatesInAgriculture"
+              expectedValue: "2"
 
-  # Tab 01.06 - Income and Programs
-  app_fd_farmer_income_prog:
-    record_count: 1
-    primary_key: "c_farmer_id"
-    primary_key_value: "farmer-002"
-    expected_fields:
-      c_farmer_id: "farmer-002"
-      c_main_source_income: "farming"
-      c_income_sources: "informal_employment"
-      c_gainful_employment: "yes"
-      c_government_employed: "no"
-      c_average_annual_income: 42000
-      c_monthly_expenditure: 3200
-      c_relative_support: "yes"
-      c_support_frequency: "seasonal"
-      c_support_type: "money,food"
-      c_support_program: "input_subsidy"
-      c_credit_default: "no"
-      c_ever_on_isp: "no"
-      c_other_input_support: "yes"
-      c_total_loans_12_months: 8000
-      c_informal_transfers: 5000
-      c_formal_transfers: 18000
-      c_networks_support: "Community labor exchange during planting"
-      c_network_associations: 1
-      c_network_relatives: 8
-    source_mapping:
-      govstack_paths:
-        - "extension.income.mainSource"
-        - "extension.income.sources12Months"
-        - "extension.income.hasGainfulEmployment"
-        - "extension.income.isGovernmentEmployed"
-        - "extension.income.averageAnnualIncomeLSL"
-        - "extension.income.monthlyExpenditureLSL"
-      form_id: "farmerIncomePrograms"
+        - index: 2
+          validations:
+            - field: "c_memberName"
+              expectedValue: "Motlomelo, Naleli"
+            - field: "c_sex"
+              expectedValue: "female"
+            - field: "c_date_of_birth"
+              expectedValue: "2014-09-08"
+            - field: "c_orphanhoodStatus"
+              expectedValue: "both_alive"
+            - field: "c_participatesInAgriculture"
+              expectedValue: "2"
 
-  # Tab 01.07 - Declaration
-  app_fd_farmer_declaration:
-    record_count: 1
-    primary_key: "c_farmer_id"
-    primary_key_value: "farmer-002"
-    expected_fields:
-      c_farmer_id: "farmer-002"
-      c_declaration_consent: "agree_declaration,agree_terms,consent_verification,consent_data_use"
-      c_declaration_full_name: "Mamosa Elizabeth Motlomelo"
-      c_declaration_date: "2025-01-22"
-      c_signature: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
-      c_registration_station: "Berea District Agricultural Office"
-      c_beneficiary_code: "BEN-2025-000002"
-      c_registration_channel: "office"
-      c_registration_status: "pending_verification"
-    source_mapping:
-      govstack_paths:
-        - "extension.declaration.consent"
-        - "extension.declaration.fullName"
-        - "extension.declaration.date"
-        - "extension.declaration.signatureBase64"
-        - "extension.registration.station"
-        - "identifiers[1].value"
-      form_id: "farmerDeclaration"
+    crop_management:
+      expectedRecords: 3  # Based on test data
+      primaryKey: "id"
+      parentField: "c_farmer_id"
+      records:
+        - index: 0
+          validations:
+            - field: "c_cropType"
+              expectedValue: "1"  # MAIZE
+            - field: "c_areaCultivated"
+              expectedValue: "2.5"
+            - field: "c_areaUnit"
+              expectedValue: "hectare"
+            - field: "c_bagsHarvested"
+              expectedValue: "45"
+            - field: "c_fertilizerApplied"
+              expectedValue: "yes"
+            - field: "c_pesticidesApplied"
+              expectedValue: "no"
 
-# =============================================================================
-# GRID/SUBFORM TABLES (Multiple records)
-# =============================================================================
+        - index: 1
+          validations:
+            - field: "c_cropType"
+              expectedValue: "8"  # SORGHUM
+            - field: "c_areaCultivated"
+              expectedValue: "0.5"
+            - field: "c_bagsHarvested"
+              expectedValue: "20"
+            - field: "c_fertilizerApplied"
+              expectedValue: "yes"
+            - field: "c_pesticidesApplied"
+              expectedValue: "yes"
 
-grid_tables:
+        - index: 2
+          validations:
+            - field: "c_cropType"
+              expectedValue: "15"  # BEANS
+            - field: "c_areaCultivated"
+              expectedValue: "0.25"
+            - field: "c_bagsHarvested"
+              expectedValue: "10"
+            - field: "c_fertilizerApplied"
+              expectedValue: "no"
+            - field: "c_pesticidesApplied"
+              expectedValue: "no"
 
-  # Household Members Grid
-  app_fd_household_members:
-    record_count: 3
-    primary_key: "c_id"
-    parent_key: "c_farmer_id"
-    parent_value: "farmer-002"
-    parent_field_name: "farmer_id"
-    form_id: "householdMemberForm"
-    joget_grid_name: "householdMembers"
-    source_path: "relatedPerson"
+    livestock_details:
+      expectedRecords: 3  # Based on test data
+      primaryKey: "id"
+      parentField: "c_farmer_id"
+      records:
+        - index: 0
+          validations:
+            - field: "c_livestockType"
+              expectedValue: "cattle-beef"
+            - field: "c_numberOfMale"
+              expectedValue: "1"
+            - field: "c_numberOfFemale"
+              expectedValue: "3"
 
-    records:
-      record_1:
-        c_id: "uuid-generated-1"
-        c_farmer_id: "farmer-002"
-        c_member_name: "Motlomelo, Mamosa Elizabeth"
-        c_sex: "female"
-        c_date_of_birth: "1987-12-24"
-        c_relationship: "head"
-        c_orphanhood_status: "both_alive"
-        c_participates_in_agriculture: "1"
-        c_disability: "none"
-        c_chronically_ill: "2"
-        source_data:
-          api_id: "hh-002-01"
-          name_text: "Motlomelo, Mamosa Elizabeth"
-          relationship: "head"
+        - index: 1
+          validations:
+            - field: "c_livestockType"
+              expectedValue: "goats"
+            - field: "c_numberOfMale"
+              expectedValue: "2"
+            - field: "c_numberOfFemale"
+              expectedValue: "8"
 
-      record_2:
-        c_id: "uuid-generated-2"
-        c_farmer_id: "farmer-002"
-        c_member_name: "Motlomelo, Teboho"
-        c_sex: "male"
-        c_date_of_birth: "2010-06-15"
-        c_relationship: "child"
-        c_orphanhood_status: "both_alive"
-        c_participates_in_agriculture: "2"
-        c_disability: "none"
-        c_chronically_ill: "2"
-        source_data:
-          api_id: "hh-002-02"
-          name_text: "Motlomelo, Teboho"
-          relationship: "child"
+        - index: 2
+          validations:
+            - field: "c_livestockType"
+              expectedValue: "chicken-village"
+            - field: "c_numberOfMale"
+              expectedValue: "3"
+            - field: "c_numberOfFemale"
+              expectedValue: "12"
 
-      record_3:
-        c_id: "uuid-generated-3"
-        c_farmer_id: "farmer-002"
-        c_member_name: "Motlomelo, Naleli"
-        c_sex: "female"
-        c_date_of_birth: "2014-09-08"
-        c_relationship: "child"
-        c_orphanhood_status: "both_alive"
-        c_participates_in_agriculture: "2"
-        c_disability: "none"
-        c_chronically_ill: "2"
-        source_data:
-          api_id: "hh-002-03"
-          name_text: "Motlomelo, Naleli"
-          relationship: "child"
+# SQL Verification Queries
+sqlQueries:
+  # Check main farmer record exists
+  verifyFarmerRecord: |
+    SELECT COUNT(*) as count
+    FROM farmer_basic_data
+    WHERE c_national_id = '123456789012';
 
-    field_mappings:
-      - joget: "memberName"
-        govstack: "name.text"
-      - joget: "sex"
-        govstack: "gender"
-      - joget: "date_of_birth"
-        govstack: "birthDate"
-      - joget: "relationship"
-        govstack: "relationship[0].coding[0].code"
-        value_mapping:
-          "head": "SELF"
-          "child": "CHILD"
-
-  # Crop Management Grid
-  app_fd_crop_management:
-    record_count: 3
-    primary_key: "c_id"
-    parent_key: "c_farmer_id"
-    parent_value: "farmer-002"
-    parent_field_name: "farmer_id"
-    form_id: "cropManagementForm"
-    joget_grid_name: "cropManagement"
-    source_path: "extension.cropManagement"
-
-    records:
-      record_1:
-        c_id: "uuid-generated-4"
-        c_farmer_id: "farmer-002"
-        c_crop_type: "maize"
-        c_area_cultivated: "1.2"
-        c_area_unit: "hectare"
-        c_bags_harvested: "28"
-        c_fertilizer_applied: "yes"
-        c_pesticides_applied: "no"
-        source_data:
-          cropType: "maize"
-          areaCultivated: "1.2"
-
-      record_2:
-        c_id: "uuid-generated-5"
-        c_farmer_id: "farmer-002"
-        c_crop_type: "sorghum"
-        c_area_cultivated: "0.5"
-        c_area_unit: "hectare"
-        c_bags_harvested: "15"
-        c_fertilizer_applied: "yes"
-        c_pesticides_applied: "no"
-        source_data:
-          cropType: "sorghum"
-          areaCultivated: "0.5"
-
-      record_3:
-        c_id: "uuid-generated-6"
-        c_farmer_id: "farmer-002"
-        c_crop_type: "mixed_beans"
-        c_area_cultivated: "0.3"
-        c_area_unit: "hectare"
-        c_bags_harvested: "12"
-        c_fertilizer_applied: "no"
-        c_pesticides_applied: "no"
-        source_data:
-          cropType: "mixed_beans"
-          areaCultivated: "0.3"
-
-    field_mappings:
-      - joget: "cropType"
-        govstack: "type"
-        value_mapping:
-          "1": "MAIZE"
-          "maize": "MAIZE"
-      - joget: "areaCultivated"
-        govstack: "areaSize"
-        transform: "numeric"
-      - joget: "areaUnit"
-        govstack: "areaUnit"
-      - joget: "bagsHarvested"
-        govstack: "harvest.quantity"
-        transform: "numeric"
-
-  # Livestock Details Grid
-  app_fd_livestock_details:
-    record_count: 3
-    primary_key: "c_id"
-    parent_key: "c_farmer_id"
-    parent_value: "farmer-002"
-    parent_field_name: "farmer_id"
-    form_id: "livestockDetailsForm"
-    joget_grid_name: "livestockDetails"
-    source_path: "extension.livestockDetails"
-    conditional_field: "hasLivestock"
-    conditional_value: "yes"
-
-    records:
-      record_1:
-        c_id: "uuid-generated-7"
-        c_farmer_id: "farmer-002"
-        c_livestock_type: "cattle-beef"
-        c_number_of_male: "1"
-        c_number_of_female: "3"
-        source_data:
-          livestockType: "cattle-beef"
-          numberOfMale: "1"
-          numberOfFemale: "3"
-
-      record_2:
-        c_id: "uuid-generated-8"
-        c_farmer_id: "farmer-002"
-        c_livestock_type: "goats"
-        c_number_of_male: "2"
-        c_number_of_female: "8"
-        source_data:
-          livestockType: "goats"
-          numberOfMale: "2"
-          numberOfFemale: "8"
-
-      record_3:
-        c_id: "uuid-generated-9"
-        c_farmer_id: "farmer-002"
-        c_livestock_type: "chicken-village"
-        c_number_of_male: "3"
-        c_number_of_female: "12"
-        source_data:
-          livestockType: "chicken-village"
-          numberOfMale: "3"
-          numberOfFemale: "12"
-
-    field_mappings:
-      - joget: "livestockType"
-        govstack: "type"
-      - joget: "numberOfMale"
-        govstack: "maleCount"
-        transform: "numeric"
-      - joget: "numberOfFemale"
-        govstack: "femaleCount"
-        transform: "numeric"
-
-# =============================================================================
-# VALIDATION CHECKLIST
-# =============================================================================
-
-validation_checklist:
-  govstack_compliance:
-    resource_type: "✅ Person"
-    identifiers: "✅ NationalId + BeneficiaryCode"
-    name: "✅ given + family"
-    gender: "✅ female"
-    address: "✅ district + city (village)"
-
-  mandatory_fields:
-    level_1_critical: "✅ 15/15 fields completed"
-    level_2_conditional: "✅ 5/5 fields completed"
-    total_completion: "✅ 20/20 (100%)"
-
-  grid_validations:
-    household_members: "✅ Min 1 required, got 3"
-    crop_management: "✅ Max 5 allowed, got 3"
-    livestock_details: "✅ Conditional on hasLivestock=yes, got 3"
-
-  data_transformations:
-    date_fields: "✅ ISO8601 format applied"
-    numeric_fields: "✅ String to number conversion"
-    boolean_fields: "✅ yes/no to true/false mapping"
-    value_mappings: "✅ All dropdown codes mapped"
-
-  parent_child_relationships:
-    household_linking: "✅ All records linked to farmer-002"
-    crop_linking: "✅ All records linked to farmer-002"
-    livestock_linking: "✅ All records linked to farmer-002"
-    unique_ids: "✅ Each grid row has unique UUID"
-
-  conditional_logic:
-    crop_production: "✅ engagedInCropProduction=yes → crops populated"
-    livestock_production: "✅ hasLivestock=yes → livestock populated"
-    government_employment: "✅ gainfulEmployment=yes → governmentEmployed field"
-    support_details: "✅ relativeSupport=yes → frequency & type fields"
-
-  metadata_references:
-    lookup_tables_used:
-      - "md03district.csv - berea ✅"
-      - "md06farmLabourSource.csv - family ✅"
-      - "md07livelihoodSource.csv - mixed ✅"
-      - "md08educationLevel.csv - college_diploma ✅"
-      - "md09infoSource.csv - radio ✅"
-      - "md12relationship.csv - head, child ✅"
-      - "md15areaUnits.csv - hectare ✅"
-      - "md16livestockType.csv - cattle-beef, goats, chicken-village ✅"
-      - "md17incomeSource.csv - farming, informal_employment ✅"
-
-# =============================================================================
-# JOGET TECHNICAL DETAILS
-# =============================================================================
-
-joget_processing_details:
-  multi_form_submission:
-    main_forms: 7
-    grid_forms: 3
-    total_form_submissions: 10
-
-  storage_pattern:
-    main_forms: "Direct FormRow with primaryKey"
-    grid_forms: "FormRowSet.setMultiRow(true) with null primaryKey"
-    parent_linking: "Via parentField in each grid row"
-
-  uuid_generation:
-    main_records: "Uses farmer-002 as primary key"
-    grid_records: "Each row gets unique UUID"
-    total_uuids_generated: 9
-
-  form_binding:
-    load_binder: "WorkflowFormBinder"
-    store_binder: "WorkflowFormBinder"
-    grid_binder: "MultirowFormBinder"
-
-  services_yml_sections_used:
-    - "farmerBasicInfo"
-    - "farmerLocation"
-    - "farmerAgriculture"
-    - "farmerHousehold"
-    - "farmerCropsLivestock"
-    - "farmerIncomePrograms"
-    - "farmerDeclaration"
-    - "householdMembers"
-    - "cropManagement"
-    - "livestockDetails"
-
-# =============================================================================
-# TESTING VERIFICATION QUERIES
-# =============================================================================
-
-verification_sql_queries:
-  check_main_farmer_record: |
-    SELECT COUNT(*) as main_records
-    FROM app_fd_farmer_basic
-    WHERE c_farmer_id = 'farmer-002';
-    -- Expected: 1
-
-  check_all_main_tables: |
+  # Check all related forms have parent_id set
+  verifyParentLinks: |
     SELECT
-      'app_fd_farmer_basic' as table_name, COUNT(*) as record_count FROM app_fd_farmer_basic WHERE c_farmer_id = 'farmer-002'
-    UNION ALL SELECT
-      'app_fd_farmer_location', COUNT(*) FROM app_fd_farmer_location WHERE c_farmer_id = 'farmer-002'
-    UNION ALL SELECT
-      'app_fd_farmer_agric', COUNT(*) FROM app_fd_farmer_agric WHERE c_farmer_id = 'farmer-002'
-    -- ... continue for all 7 main tables
-    -- Expected: 7 rows, each with record_count = 1
+      (SELECT COUNT(*) FROM farm_location WHERE c_parent_id = ?) as location_count,
+      (SELECT COUNT(*) FROM farmer_registry WHERE c_parent_id = ?) as registry_count,
+      (SELECT COUNT(*) FROM farmer_income WHERE c_parent_id = ?) as income_count,
+      (SELECT COUNT(*) FROM farmer_declaration WHERE c_parent_id = ?) as declaration_count;
 
-  check_household_members: |
+  # Check grid data properly linked
+  verifyHouseholdMembers: |
+    SELECT COUNT(*) as count
+    FROM household_members
+    WHERE c_farmer_id = ?;
+
+  verifyCrops: |
+    SELECT COUNT(*) as count
+    FROM crop_management
+    WHERE c_farmer_id = ?;
+
+  verifyLivestock: |
+    SELECT COUNT(*) as count
+    FROM livestock_details
+    WHERE c_farmer_id = ?;
+
+  # Data integrity check
+  checkOrphanedGridRows: |
     SELECT
-      c_id, c_farmer_id, c_member_name, c_relationship
-    FROM app_fd_household_members
-    WHERE c_farmer_id = 'farmer-002'
-    ORDER BY c_member_name;
-    -- Expected: 3 rows
+      (SELECT COUNT(*) FROM household_members WHERE c_farmer_id IS NULL) as orphaned_household,
+      (SELECT COUNT(*) FROM crop_management WHERE c_farmer_id IS NULL) as orphaned_crops,
+      (SELECT COUNT(*) FROM livestock_details WHERE c_farmer_id IS NULL) as orphaned_livestock;
 
-  check_crops: |
-    SELECT
-      c_id, c_farmer_id, c_crop_type, c_area_cultivated, c_bags_harvested
-    FROM app_fd_crop_management
-    WHERE c_farmer_id = 'farmer-002'
-    ORDER BY c_crop_type;
-    -- Expected: 3 rows (maize, mixed_beans, sorghum)
-
-  check_livestock: |
-    SELECT
-      c_id, c_farmer_id, c_livestock_type, c_number_of_male, c_number_of_female
-    FROM app_fd_livestock_details
-    WHERE c_farmer_id = 'farmer-002'
-    ORDER BY c_livestock_type;
-    -- Expected: 3 rows (cattle-beef, chicken-village, goats)
-
-  check_total_records: |
-    SELECT
-      (SELECT COUNT(*) FROM app_fd_farmer_basic WHERE c_farmer_id = 'farmer-002') +
-      (SELECT COUNT(*) FROM app_fd_farmer_location WHERE c_farmer_id = 'farmer-002') +
-      (SELECT COUNT(*) FROM app_fd_farmer_agric WHERE c_farmer_id = 'farmer-002') +
-      (SELECT COUNT(*) FROM app_fd_farmer_household WHERE c_farmer_id = 'farmer-002') +
-      (SELECT COUNT(*) FROM app_fd_farmer_crop_livestck WHERE c_farmer_id = 'farmer-002') +
-      (SELECT COUNT(*) FROM app_fd_farmer_income_prog WHERE c_farmer_id = 'farmer-002') +
-      (SELECT COUNT(*) FROM app_fd_farmer_declaration WHERE c_farmer_id = 'farmer-002') +
-      (SELECT COUNT(*) FROM app_fd_household_members WHERE c_farmer_id = 'farmer-002') +
-      (SELECT COUNT(*) FROM app_fd_crop_management WHERE c_farmer_id = 'farmer-002') +
-      (SELECT COUNT(*) FROM app_fd_livestock_details WHERE c_farmer_id = 'farmer-002')
-    AS total_records;
-    -- Expected: 16
-
-# =============================================================================
-# FINAL SUMMARY
-# =============================================================================
-
-final_summary:
-  success_criteria: "✅ All validation checks passed"
-  total_database_tables: 10
-  total_records_created: 16
-  main_form_records: 7
-  grid_records: 9
-  govstack_compliance: "100%"
-  mandatory_fields_completion: "100%"
-  services_yml_mapping_coverage: "100%"
-
-  expected_processing_outcome: |
-    When test-data.json is processed through the GovStack Registration Plugin:
-    1. ✅ 7 main form tables created with 1 record each
-    2. ✅ 3 grid tables created with 3 records each
-    3. ✅ All parent-child relationships maintained via c_farmer_id linkage
-    4. ✅ All mandatory fields populated according to validation-rules.yaml
-    5. ✅ All conditional logic properly executed
-    6. ✅ All data transformations applied correctly
-    7. ✅ Full GovStack Registration BB API compliance achieved
+# Test execution notes
+notes:
+  - "All table names are verified from actual form JSON definitions"
+  - "Column names use c_ prefix followed by field ID"
+  - "Grid tables link via c_farmer_id field"
+  - "Main forms link via c_parent_id field"
+  - "No app_fd_ prefix is used in actual table names"
+  - "Some forms share tables (e.g., farmer_registry used by multiple sections)"

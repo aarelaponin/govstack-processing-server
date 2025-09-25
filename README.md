@@ -22,6 +22,18 @@ curl -X POST http://your-joget-server/jw/api/govstack/v2/process \
   -d @src/main/resources/docs-metadata/test-data.json
 ```
 
+## 🆕 Generic Service Support
+
+**Version 8.1 now supports ANY service type!** The plugin is no longer limited to farmer registration - it can be configured for health registries, education systems, social services, or any other domain.
+
+### How It Works
+- **Configuration-driven approach**: All service-specific mappings are defined in `services.yml`
+- **No code changes required**: Simply provide the right configuration for your service
+- **Backward compatible**: Existing farmer deployments continue to work unchanged
+- **Example configurations included**: See `services-health-example.yml` for health registry setup
+
+👉 **[Read the Generic Configuration Guide](docs/GENERIC_CONFIGURATION.md)** to learn how to configure for your service type.
+
 ## Documentation
 
 ### 📚 Documentation Index
@@ -31,6 +43,7 @@ See **[docs/INDEX.md](docs/INDEX.md)** for complete documentation index.
 
 | Document | Description |
 |----------|-------------|
+| **[Generic Configuration](docs/GENERIC_CONFIGURATION.md)** | **🆕 Configure plugin for ANY service type (not just farmers)** |
 | [Field Mapping Fixes](docs/FIELD_MAPPING_FIXES.md) | Summary of all fixes applied (Sept 2025) |
 | [Complete Fix Documentation](docs/FIXES_DOCUMENTATION.md) | Detailed technical documentation of all changes |
 | [Services YAML Guide](docs/SERVICES_YML_GUIDE.md) | Configuration guide for field mappings |

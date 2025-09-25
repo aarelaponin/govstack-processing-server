@@ -12,14 +12,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Unit tests for GovStackDataMapper using actual test-data.json
+ * Unit tests for GovStackDataMapperV3 using actual test-data.json
  * Note: Some tests are marked @Ignore as they require Joget dependencies
  */
 public class GovStackDataMapperTest {
 
     private YamlMetadataService metadataService;
     private DataTransformer dataTransformer;
-    private GovStackDataMapper mapper;
+    private GovStackDataMapperV3 mapper;
     private String testDataJson;
     private TestFieldHelper fieldHelper;
 
@@ -31,7 +31,7 @@ public class GovStackDataMapperTest {
         // Initialize services
         metadataService = new YamlMetadataService();
         dataTransformer = new DataTransformer();
-        mapper = new GovStackDataMapper(metadataService, dataTransformer);
+        mapper = new GovStackDataMapperV3(metadataService, dataTransformer);
 
         // Initialize field helper after loading metadata (will be done in each test)
         fieldHelper = null;
@@ -45,7 +45,7 @@ public class GovStackDataMapperTest {
         fieldHelper = new TestFieldHelper(metadataService);
 
         // Map the data
-        Map<String, Object> result = mapper.mapGovStackToJoget(testDataJson);
+        Map<String, Object> result = mapper.mapToMultipleForms(testDataJson);
 
         assertNotNull(result);
         assertNotNull(result.get("mainForm"));
@@ -216,7 +216,7 @@ public class GovStackDataMapperTest {
         String emptyJson = "{}";
 
         try {
-            Map<String, Object> result = mapper.mapGovStackToJoget(emptyJson);
+            Map<String, Object> result = mapper.mapToMultipleForms(emptyJson);
             assertNotNull(result);
 
             Map<String, String> mainForm = (Map<String, String>) result.get("mainForm");
@@ -233,7 +233,7 @@ public class GovStackDataMapperTest {
         String invalidJson = "not a json";
 
         try {
-            mapper.mapGovStackToJoget(invalidJson);
+            mapper.mapToMultipleForms(invalidJson);
             fail("Should throw exception for invalid JSON");
         } catch (Exception e) {
             assertTrue(e.getMessage().contains("Error"));
@@ -243,7 +243,7 @@ public class GovStackDataMapperTest {
     @Test
     public void testNullJson() {
         try {
-            mapper.mapGovStackToJoget(null);
+            mapper.mapToMultipleForms(null);
             fail("Should throw exception for null JSON");
         } catch (Exception e) {
             assertTrue(e.getMessage() != null);

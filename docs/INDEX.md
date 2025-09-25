@@ -6,6 +6,7 @@
 - **[Field Mapping Fixes](FIELD_MAPPING_FIXES.md)** - Quick summary of September 2025 fixes
 - **[Complete Fix Documentation](FIXES_DOCUMENTATION.md)** - Detailed technical documentation of all changes
 - **[Services YAML Guide](SERVICES_YML_GUIDE.md)** - Complete guide to configuring field mappings
+- **[Generic Configuration Guide](GENERIC_CONFIGURATION.md)** - How to configure plugin for any service type (not just farmers)
 
 ### Database Documentation
 - **[Database Schema](DATABASE_SCHEMA.md)** - Initial database schema analysis

@@ -10,7 +10,11 @@ import java.util.*;
 
 /**
  * Service to map GovStack JSON data to Joget form fields based on YAML metadata
+ * @deprecated Since v8.1 - Use {@link GovStackDataMapperV2} or {@link GovStackDataMapperV3} instead.
+ *             V2 provides multi-form support with hardcoded mappings.
+ *             V3 provides configuration-driven generic service support.
  */
+@Deprecated
 public class GovStackDataMapper {
     private static final String CLASS_NAME = GovStackDataMapper.class.getName();
 

@@ -10,7 +10,11 @@ import java.util.Map;
 
 /**
  * GovStack-compliant registration service that uses YAML metadata for mapping
+ * @deprecated Since v8.1 - Use {@link GovStackRegistrationServiceV2} or {@link GovStackRegistrationServiceV3} instead.
+ *             V2 provides multi-form support with hardcoded mappings.
+ *             V3 provides configuration-driven generic service support.
  */
+@Deprecated
 public class GovStackRegistrationService implements ApiRequestProcessor {
     private static final String CLASS_NAME = GovStackRegistrationService.class.getName();
 

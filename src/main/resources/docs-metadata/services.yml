@@ -12,6 +12,36 @@ entities:
       - FarmerRegistrationNumber
       - BeneficiaryCode
 
+# Service configuration for making the plugin generic
+# These settings allow the plugin to work with any service type, not just farmers
+serviceConfig:
+  # The parent form that serves as the main registration form
+  parentFormId: "farmerRegistrationForm"
+
+  # Map section names to actual Joget form IDs
+  # This replaces the hardcoded SECTION_TO_FORM_MAP in the Java code
+  sectionToFormMap:
+    farmerBasicInfo: "farmerBasicInfo"
+    farmerLocation: "farmerLocation"
+    farmerAgriculture: "farmerAgriculture"
+    farmerCropsLivestock: "farmerCropsLivestock"
+    farmerHousehold: "farmerHousehold"
+    farmerIncomePrograms: "farmerIncomePrograms"
+    farmerDeclaration: "farmerDeclaration"
+
+  # Grid configurations - maps grid names to their settings
+  # This replaces hardcoded switch statements in TableDataHandler.java
+  gridMappings:
+    householdMembers:
+      formId: "householdMemberForm"
+      parentField: "farmer_id"
+    cropManagement:
+      formId: "cropManagementForm"
+      parentField: "farmer_id"
+    livestockDetails:
+      formId: "livestockDetailsForm"
+      parentField: "farmer_id"
+
 formMappings:
   # Tab 1: Basic Information
   farmerBasicInfo:

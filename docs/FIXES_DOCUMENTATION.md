@@ -359,6 +359,26 @@ python3 run_diagnostic_validation.py --spec generated/test-validation.yml
 ./regenerate_and_validate.sh
 ```
 
+### 4.6 Reference Fields in Parent Form (Fixed Sept 25, 2025)
+
+**Issue:** Reference fields (c_basic_data, c_household_data, etc.) in app_fd_farms_registry were NULL after API submission but populated when saved through UI.
+
+**Root Cause:** MultiFormSubmissionManager.createParentRecord() only created minimal parent record without setting reference fields.
+
+**Fix:** Updated createParentRecord() to populate all reference fields:
+```java
+parentData.put("basic_data", primaryKey);
+parentData.put("household_data", primaryKey);
+parentData.put("location_data", primaryKey);
+parentData.put("activities_data", primaryKey);
+parentData.put("crops_livestock", primaryKey);
+parentData.put("income_data", primaryKey);
+parentData.put("declaration", primaryKey);
+```
+
+**Files Modified:**
+- MultiFormSubmissionManager.java (lines 104-112)
+
 ---
 
 *Documentation compiled on September 25, 2025*
