@@ -3,7 +3,7 @@
     "properties": {
         "id": "farmerHousehold",
         "name": "01.04 - Farmer Household Members",
-        "tableName": "farmer_registry",
+        "tableName": "farmer_household",
         "loadBinder": {
             "className": "org.joget.apps.form.lib.WorkflowFormBinder",
             "properties": {}
@@ -29,19 +29,6 @@
             "elements": [
                 {
                     "elements": [
-                        {
-                            "className": "org.joget.apps.form.lib.HiddenField",
-                            "properties": {
-                                "useDefaultWhenEmpty": "",
-                                "id": "household_key",
-                                "value": "#form.farmerRegistrationForm.id#",
-                                "validator": {
-                                    "className": "",
-                                    "properties": {}
-                                },
-                                "workflowVariable": ""
-                            }
-                        },
                         {
                             "className": "org.joget.apps.form.lib.HiddenField",
                             "properties": {

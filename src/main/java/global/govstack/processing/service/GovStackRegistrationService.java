@@ -1,20 +1,24 @@
 package global.govstack.processing.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import global.govstack.processing.exception.*;
 import global.govstack.processing.service.metadata.*;
+import global.govstack.processing.service.validation.ServiceMetadataValidator;
+import global.govstack.processing.validation.*;
 import org.joget.commons.util.LogUtil;
+import org.joget.commons.util.UuidGenerator;
 import org.json.JSONObject;
+import org.json.JSONArray;
+import javax.sql.DataSource;
+import org.joget.apps.app.service.AppUtil;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * GovStack-compliant registration service that uses YAML metadata for mapping
- * @deprecated Since v8.1 - Use {@link GovStackRegistrationServiceV2} or {@link GovStackRegistrationServiceV3} instead.
- *             V2 provides multi-form support with hardcoded mappings.
- *             V3 provides configuration-driven generic service support.
+ * GovStack Registration Service that saves to multiple forms
+ * Uses configuration-driven mappings for generic service support
  */
-@Deprecated
 public class GovStackRegistrationService implements ApiRequestProcessor {
     private static final String CLASS_NAME = GovStackRegistrationService.class.getName();
 
@@ -23,28 +27,34 @@ public class GovStackRegistrationService implements ApiRequestProcessor {
     private final ServiceValidator serviceValidator;
     private final GovStackDataMapper dataMapper;
     private final TableDataHandler tableDataHandler;
-    private final FormSubmissionManager formSubmissionManager;
+    private final MultiFormSubmissionManager multiFormManager;
+    private final DataQualityValidator dataQualityValidator;
+    private final boolean enableDataQualityValidation;
+    private final boolean enableConditionalValidation;
 
-    /**
-     * Constructor with all dependencies
-     * @param serviceId The configured service ID
-     * @param formId The main form ID
-     * @throws ConfigurationException if initialization fails
-     */
-    public GovStackRegistrationService(String serviceId, String formId) throws ConfigurationException {
+    public GovStackRegistrationService(String serviceId) throws ConfigurationException {
+        this(serviceId, true, true);
+    }
+
+    public GovStackRegistrationService(String serviceId, boolean enableDataQualityValidation, boolean enableConditionalValidation) throws ConfigurationException {
         this.serviceId = serviceId;
+        this.enableDataQualityValidation = enableDataQualityValidation;
+        this.enableConditionalValidation = enableConditionalValidation;
 
         try {
-            // Initialize metadata service
+            // Initialize services
             this.metadataService = new YamlMetadataService();
             this.metadataService.loadMetadata(serviceId);
 
-            // Initialize other services
             this.serviceValidator = new ServiceValidator(serviceId);
             DataTransformer dataTransformer = new DataTransformer();
             this.dataMapper = new GovStackDataMapper(metadataService, dataTransformer);
-            this.tableDataHandler = new TableDataHandler();
-            this.formSubmissionManager = new FormSubmissionManager(formId);
+            this.tableDataHandler = new TableDataHandler(metadataService);  // Pass metadata service for configuration support
+            this.multiFormManager = new MultiFormSubmissionManager();
+            this.dataQualityValidator = enableDataQualityValidation ? new DataQualityValidator() : null;
+
+            // Validate services.yml against database schema
+            validateMetadataConfiguration();
 
             LogUtil.info(CLASS_NAME, "GovStackRegistrationService initialized for service: " + serviceId);
 
@@ -54,62 +64,140 @@ public class GovStackRegistrationService implements ApiRequestProcessor {
     }
 
     /**
-     * Process a GovStack registration request
-     * @param requestBody The request body in GovStack format
-     * @return JSONObject with the response
-     * @throws ApiProcessingException if processing fails
+     * Validate services.yml configuration against database schema
      */
+    private void validateMetadataConfiguration() {
+        try {
+            // Get DataSource from Joget
+            DataSource dataSource = (DataSource) AppUtil.getApplicationContext().getBean("setupDataSource");
+
+            ServiceMetadataValidator validator = new ServiceMetadataValidator(dataSource);
+            ServiceMetadataValidator.ValidationResult result = validator.validate();
+
+            if (!result.valid) {
+                LogUtil.error(CLASS_NAME, null, "Services.yml validation failed:\n" + result.getReport());
+                // Log errors but don't fail startup to allow fixing configuration
+                for (ServiceMetadataValidator.ValidationError error : result.errors) {
+                    LogUtil.error(CLASS_NAME, null, "Configuration Error: " + error);
+                }
+            } else {
+                LogUtil.info(CLASS_NAME, "Services.yml validation passed");
+            }
+
+            // Log warnings
+            for (ServiceMetadataValidator.ValidationWarning warning : result.warnings) {
+                LogUtil.warn(CLASS_NAME, "Configuration Warning: " + warning);
+            }
+
+        } catch (Exception e) {
+            LogUtil.error(CLASS_NAME, e, "Error validating metadata configuration: " + e.getMessage());
+            // Don't fail startup, just log the error
+        }
+    }
+
     @Override
     public JSONObject processRequest(String requestBody) throws ApiProcessingException {
         try {
             LogUtil.info(CLASS_NAME, "Processing GovStack registration request for service: " + serviceId);
 
-            // Debug: Log first 1000 chars of received data to understand structure
-            String preview = requestBody.length() > 1000 ? requestBody.substring(0, 1000) + "..." : requestBody;
-            LogUtil.info(CLASS_NAME, "Received data preview: " + preview);
-
-            // Parse and validate request
+            // Validate request
             validateRequest(requestBody);
 
-            // Map GovStack data to Joget format
-            Map<String, Object> mappedData = dataMapper.mapGovStackToJoget(requestBody);
+            // Map GovStack data to multiple Joget forms
+            Map<String, Object> mappedData = dataMapper.mapToMultipleForms(requestBody);
 
-            // Extract main form data and array data
-            Map<String, String> mainFormData = (Map<String, String>) mappedData.get("mainForm");
+            // Validate data quality if enabled
+            if (enableDataQualityValidation && dataQualityValidator != null) {
+                ValidationResult validationResult = dataQualityValidator.validateJson(requestBody);
+                if (!validationResult.isValid()) {
+                    LogUtil.warn(CLASS_NAME, "Data quality validation failed: " + validationResult.getSummary());
+                    // Return validation errors in response
+                    return buildValidationErrorResponse(validationResult);
+                }
+                LogUtil.info(CLASS_NAME, "Data quality validation passed");
+            } else {
+                LogUtil.info(CLASS_NAME, "Data quality validation disabled");
+            }
+
+            // Conditional validation if enabled
+            if (enableConditionalValidation) {
+                // Parse JSON to Map for conditional validation
+                ObjectMapper objectMapper = new ObjectMapper();
+                Map<String, Object> dataMap = objectMapper.readValue(requestBody, Map.class);
+
+                // Load conditional validation rules from configuration
+                ValidationRuleLoader ruleLoader = new ValidationRuleLoader();
+                List<ValidationRuleLoader.ConditionalValidationRule> rules = ruleLoader.getConditionalValidationRules();
+
+                ValidationResult conditionalResult = ConditionalValidator.validateAllConditionals(dataMap, rules);
+                if (!conditionalResult.isValid()) {
+                    LogUtil.warn(CLASS_NAME, "Conditional validation failed: " + conditionalResult.getSummary());
+                    return buildValidationErrorResponse(conditionalResult);
+                }
+                LogUtil.info(CLASS_NAME, "Conditional validation passed");
+            } else {
+                LogUtil.info(CLASS_NAME, "Conditional validation disabled");
+            }
+
+            // Extract components
+            Map<String, Map<String, String>> formData = (Map<String, Map<String, String>>) mappedData.get("formData");
             List<Map<String, Object>> arrayData = (List<Map<String, Object>>) mappedData.get("arrayData");
+            String primaryKey = (String) mappedData.get("primaryKey");
 
-            // Validate main form data
-            if (mainFormData == null || mainFormData.isEmpty()) {
-                throw new ValidationException("No valid form data was mapped from request");
+            if (primaryKey == null || primaryKey.trim().isEmpty()) {
+                primaryKey = UuidGenerator.getInstance().getUuid();
             }
 
-            // Save main form data
-            String primaryId = formSubmissionManager.saveData(mainFormData);
+            LogUtil.info(CLASS_NAME, "Using primary key: " + primaryKey);
 
-            if (primaryId == null || primaryId.trim().isEmpty()) {
-                throw new FormSubmissionException("Failed to save main form data");
+            // First, create parent record in main form - get from configuration
+            String parentFormId = metadataService.getParentFormId(); // Gets from config or defaults to "farmerRegistrationForm"
+
+            try {
+                boolean parentCreated = multiFormManager.createParentRecord(parentFormId, primaryKey);
+                if (parentCreated) {
+                    LogUtil.info(CLASS_NAME, "✓ Created parent record in form: " + parentFormId);
+                } else {
+                    LogUtil.warn(CLASS_NAME, "Failed to create parent record in form: " + parentFormId);
+                }
+            } catch (Exception e) {
+                LogUtil.error(CLASS_NAME, e, "Error creating parent record: " + e.getMessage());
+                // Continue anyway - sub-forms might still work
             }
 
-            LogUtil.info(CLASS_NAME, "Saved main form with ID: " + primaryId);
+            // Then save to multiple sub-forms
+            if (formData != null && !formData.isEmpty()) {
+                Map<String, Boolean> saveResults = multiFormManager.saveToMultipleForms(formData, primaryKey);
 
-            // Save array data (household members, etc.)
+                // Log results
+                for (Map.Entry<String, Boolean> entry : saveResults.entrySet()) {
+                    if (entry.getValue()) {
+                        LogUtil.info(CLASS_NAME, "✓ Saved to form: " + entry.getKey());
+                    } else {
+                        LogUtil.warn(CLASS_NAME, "✗ Failed to save to form: " + entry.getKey());
+                    }
+                }
+
+                // Check if at least one form was saved successfully
+                boolean anySuccess = saveResults.values().stream().anyMatch(Boolean::booleanValue);
+                if (!anySuccess) {
+                    throw new FormSubmissionException("Failed to save to any forms");
+                }
+            }
+
+            // Save array data (grids)
             if (arrayData != null && !arrayData.isEmpty()) {
                 try {
-                    tableDataHandler.saveArrayData(arrayData, primaryId);
+                    tableDataHandler.saveArrayData(arrayData, primaryKey);
                     LogUtil.info(CLASS_NAME, "Saved array data for " + arrayData.size() + " grids");
                 } catch (Exception e) {
-                    // Log but don't fail the whole request if sub-table saving fails
                     LogUtil.error(CLASS_NAME, e, "Error saving array data: " + e.getMessage());
                 }
             }
 
-            // Build and return success response
-            return buildSuccessResponse(primaryId);
+            // Build success response
+            return buildSuccessResponse(primaryKey);
 
-        } catch (InvalidRequestException e) {
-            throw ApiProcessingException.invalidRequest(e.getMessage());
-        } catch (ValidationException e) {
-            throw ApiProcessingException.validationError(e.getMessage());
         } catch (FormSubmissionException e) {
             throw ApiProcessingException.formSubmissionError(e.getMessage());
         } catch (Exception e) {
@@ -118,41 +206,35 @@ public class GovStackRegistrationService implements ApiRequestProcessor {
         }
     }
 
-    /**
-     * Validate the incoming request
-     * @param requestBody The request body
-     * @throws InvalidRequestException if validation fails
-     */
-    private void validateRequest(String requestBody) throws InvalidRequestException {
+    public void validateServiceId(String requestServiceId) throws ValidationException {
+        try {
+            serviceValidator.validateServiceId(requestServiceId);
+        } catch (InvalidRequestException e) {
+            throw new ValidationException("Invalid service ID: " + e.getMessage());
+        }
+    }
+
+    private void validateRequest(String requestBody) throws FormSubmissionException {
         if (requestBody == null || requestBody.trim().isEmpty()) {
-            throw new InvalidRequestException("Request body cannot be empty");
+            throw new FormSubmissionException("Request body cannot be empty");
         }
 
         if (!requestBody.trim().startsWith("{")) {
-            throw new InvalidRequestException("Invalid JSON format: Must be a JSON object");
+            throw new FormSubmissionException("Invalid JSON format: Must be a JSON object");
         }
-
-        // Additional validation can be added here
     }
 
-    /**
-     * Build success response
-     * @param applicationId The created application ID
-     * @return JSONObject with success response
-     */
     private JSONObject buildSuccessResponse(String applicationId) {
         JSONObject response = new JSONObject();
 
-        // Basic response structure following GovStack pattern
         response.put("success", true);
         response.put("applicationId", applicationId);
         response.put("status", "submitted");
         response.put("timestamp", System.currentTimeMillis());
 
-        // Add service info
         JSONObject serviceInfo = new JSONObject();
         serviceInfo.put("serviceId", serviceId);
-        serviceInfo.put("serviceName", "Farmers Registry Service");
+        serviceInfo.put("version", "2.0");
         response.put("service", serviceInfo);
 
         LogUtil.info(CLASS_NAME, "Built success response for application: " + applicationId);
@@ -161,11 +243,32 @@ public class GovStackRegistrationService implements ApiRequestProcessor {
     }
 
     /**
-     * Validate service ID in the request path
-     * @param requestServiceId The service ID from the request
-     * @throws InvalidRequestException if validation fails
+     * Build validation error response
      */
-    public void validateServiceId(String requestServiceId) throws InvalidRequestException {
-        serviceValidator.validateServiceId(requestServiceId);
+    private JSONObject buildValidationErrorResponse(ValidationResult validationResult) {
+        JSONObject response = new JSONObject();
+
+        response.put("success", false);
+        response.put("status", "validation_failed");
+        response.put("errorCount", validationResult.getErrorCount());
+
+        // Add error details
+        JSONArray errors = new JSONArray();
+        for (ValidationError error : validationResult.getErrors()) {
+            JSONObject errorObj = new JSONObject();
+            errorObj.put("field", error.getField());
+            errorObj.put("message", error.getMessage());
+            errorObj.put("type", error.getType().toString());
+            if (error.getFormId() != null) {
+                errorObj.put("formId", error.getFormId());
+            }
+            errors.put(errorObj);
+        }
+        response.put("errors", errors);
+
+        response.put("message", "Data validation failed. Please correct the errors and try again.");
+        response.put("timestamp", System.currentTimeMillis());
+
+        return response;
     }
 }

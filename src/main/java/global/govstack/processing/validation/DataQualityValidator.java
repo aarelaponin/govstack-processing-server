@@ -246,13 +246,7 @@ public class DataQualityValidator {
      * Validate conditional requirements
      */
     private void validateConditionalRequirements(Map<String, Object> data, ValidationResult result) {
-        // Use the conditional validator
-        ValidationResult conditionalResult = ConditionalValidator.validateFarmersRegistryConditionals(data);
-        for (ValidationError error : conditionalResult.getErrors()) {
-            result.addError(error);
-        }
-
-        // Additional conditional rules from YAML
+        // Load conditional rules from YAML configuration
         List<ValidationRuleLoader.ConditionalValidationRule> conditionalRules =
             ruleLoader.getConditionalValidationRules();
         for (ValidationRuleLoader.ConditionalValidationRule rule : conditionalRules) {

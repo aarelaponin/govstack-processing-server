@@ -30,6 +30,53 @@
                 "value": "farmerRegistrationForm",
                 "required": "true",
                 "description": "@@ProcessingAPI.formId.desc@@"
+            },
+            {
+                "name": "useV3",
+                "label": "Use Configuration-Driven Implementation (V3)",
+                "type": "checkbox",
+                "value": "true",
+                "description": "Enable V3 implementation with metadata-driven field mappings and grid handling. Disable to use V2 (legacy hardcoded mappings).",
+                "options": [
+                    {
+                        "value": "true",
+                        "label": "Enabled (Recommended)"
+                    }
+                ]
+            },
+            {
+                "name": "enableDataQualityValidation",
+                "label": "Enable Data Quality Validation",
+                "type": "selectbox",
+                "value": "true",
+                "description": "Enable validation of critical fields (service-specific). Disable for services with different field requirements.",
+                "options": [
+                    {
+                        "value": "true",
+                        "label": "Enabled"
+                    },
+                    {
+                        "value": "false",
+                        "label": "Disabled"
+                    }
+                ]
+            },
+            {
+                "name": "enableConditionalValidation",
+                "label": "Enable Conditional Validation",
+                "type": "selectbox",
+                "value": "true",
+                "description": "Enable validation of conditional business rules (service-specific). Disable for services with different validation requirements.",
+                "options": [
+                    {
+                        "value": "true",
+                        "label": "Enabled"
+                    },
+                    {
+                        "value": "false",
+                        "label": "Disabled"
+                    }
+                ]
             }
         ]
     }

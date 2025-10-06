@@ -19,7 +19,7 @@ public class GovStackDataMapperTest {
 
     private YamlMetadataService metadataService;
     private DataTransformer dataTransformer;
-    private GovStackDataMapperV3 mapper;
+    private GovStackDataMapper mapper;
     private String testDataJson;
     private TestFieldHelper fieldHelper;
 
@@ -31,7 +31,7 @@ public class GovStackDataMapperTest {
         // Initialize services
         metadataService = new YamlMetadataService();
         dataTransformer = new DataTransformer();
-        mapper = new GovStackDataMapperV3(metadataService, dataTransformer);
+        mapper = new GovStackDataMapper(metadataService, dataTransformer);
 
         // Initialize field helper after loading metadata (will be done in each test)
         fieldHelper = null;

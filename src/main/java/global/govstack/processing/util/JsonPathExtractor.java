@@ -54,8 +54,16 @@ public class JsonPathExtractor {
         String[] parts = path.split("\\.");
         JsonNode current = node;
 
+        // Debug logging for agriculturalManagementSkills
+        if (path != null && path.contains("agriculturalManagementSkills")) {
+            LogUtil.info(CLASS_NAME, "Extracting agriculturalManagementSkills from path: " + path);
+        }
+
         for (String part : parts) {
             if (current == null) {
+                if (path != null && path.contains("agriculturalManagementSkills")) {
+                    LogUtil.info(CLASS_NAME, "  Current node became null at part: " + part);
+                }
                 return null;
             }
 
@@ -77,8 +85,19 @@ public class JsonPathExtractor {
                     return null;
                 }
             } else {
+                JsonNode previous = current;
                 current = current.get(part);
+
+                // Debug logging for agriculturalManagementSkills
+                if (path != null && path.contains("agriculturalManagementSkills")) {
+                    LogUtil.info(CLASS_NAME, "  Part '" + part + "': " +
+                        (previous.has(part) ? "found -> " + (current != null ? current.getNodeType() + ": " + current : "null") : "NOT FOUND"));
+                }
             }
+        }
+
+        if (path != null && path.contains("agriculturalManagementSkills")) {
+            LogUtil.info(CLASS_NAME, "  Final result: " + (current != null ? current.getNodeType() + ": " + current : "null"));
         }
 
         return current;

@@ -20,6 +20,7 @@ public class YamlMetadataService {
 
     private Map<String, Object> serviceMetadata;
     private Map<String, Object> formMappings;
+    private Map<String, Object> yamlData;
     private String serviceId;
 
     /**
@@ -49,7 +50,7 @@ public class YamlMetadataService {
             }
 
             Yaml yaml = new Yaml();
-            Map<String, Object> yamlData = yaml.load(inputStream);
+            this.yamlData = yaml.load(inputStream);
 
             // Extract service metadata
             serviceMetadata = (Map<String, Object>) yamlData.get("service");
@@ -108,6 +109,14 @@ public class YamlMetadataService {
      */
     public Map<String, Object> getAllFormMappings() {
         return formMappings != null ? formMappings : new HashMap<>();
+    }
+
+    /**
+     * Get form mappings (alias for getAllFormMappings)
+     * @return Map of all form sections
+     */
+    public Map<String, Object> getFormMappings() {
+        return getAllFormMappings();
     }
 
     /**
@@ -291,5 +300,138 @@ public class YamlMetadataService {
             return gridConfig.get("parentField");
         }
         return null;
+    }
+
+    /**
+     * Get the parent column name for a specific grid
+     * This is the database column name (e.g., "c_farmer_id")
+     * @param gridName The name of the grid
+     * @return The parent column name for the grid, or null if not configured
+     */
+    public String getGridParentColumn(String gridName) {
+        Map<String, String> gridConfig = getGridConfig(gridName);
+        if (gridConfig != null && gridConfig.containsKey("parentColumn")) {
+            return gridConfig.get("parentColumn");
+        }
+        return null;
+    }
+
+    /**
+     * Get the list of master data fields from metadata configuration
+     * Master data fields should NOT be normalized/transformed - they contain codes
+     * synchronized from lookup tables and must pass through unchanged
+     *
+     * @return Set of master data field names, or empty set if not configured
+     */
+    @SuppressWarnings("unchecked")
+    public Set<String> getMasterDataFields() {
+        if (yamlData == null) {
+            LogUtil.warn(CLASS_NAME, "YAML data not loaded, returning empty masterDataFields set");
+            return Collections.emptySet();
+        }
+
+        Map<String, Object> metadata = (Map<String, Object>) yamlData.get("metadata");
+        if (metadata == null) {
+            LogUtil.info(CLASS_NAME, "No metadata section in configuration, returning empty masterDataFields set");
+            return Collections.emptySet();
+        }
+
+        List<String> fields = (List<String>) metadata.get("masterDataFields");
+        if (fields == null || fields.isEmpty()) {
+            LogUtil.info(CLASS_NAME, "No masterDataFields configured, returning empty set");
+            return Collections.emptySet();
+        }
+
+        LogUtil.info(CLASS_NAME, "Loaded " + fields.size() + " master data fields from configuration");
+        return new HashSet<>(fields);
+    }
+
+    /**
+     * Get field normalization configuration from metadata
+     * Defines which fields should be normalized to specific LOV formats (yes/no, 1/2, etc.)
+     * @return Map of normalization type to list of field names
+     */
+    public Map<String, List<String>> getFieldNormalizationConfig() {
+        if (yamlData == null) {
+            LogUtil.warn(CLASS_NAME, "YAML data not loaded, returning empty normalization config");
+            return Collections.emptyMap();
+        }
+
+        Map<String, Object> metadata = (Map<String, Object>) yamlData.get("metadata");
+        if (metadata == null) {
+            LogUtil.info(CLASS_NAME, "No metadata section, returning empty normalization config");
+            return Collections.emptyMap();
+        }
+
+        Map<String, Object> normConfig = (Map<String, Object>) metadata.get("fieldNormalization");
+        if (normConfig == null) {
+            LogUtil.info(CLASS_NAME, "No fieldNormalization configured, returning empty map");
+            return Collections.emptyMap();
+        }
+
+        Map<String, List<String>> result = new HashMap<>();
+        for (Map.Entry<String, Object> entry : normConfig.entrySet()) {
+            List<String> fields = (List<String>) entry.getValue();
+            if (fields != null) {
+                result.put(entry.getKey(), fields);
+            }
+        }
+
+        LogUtil.info(CLASS_NAME, "Loaded normalization config for " + result.size() + " normalization types");
+        return result;
+    }
+
+    /**
+     * Get the default grid parent field from service configuration defaults
+     * This is the field name used as foreign key in grid tables (e.g., "farmer_id", "student_id")
+     *
+     * @return Default parent field name, or null if not configured
+     */
+    @SuppressWarnings("unchecked")
+    public String getDefaultGridParentField() {
+        Map<String, Object> serviceConfig = getServiceConfig();
+        if (serviceConfig == null) {
+            LogUtil.warn(CLASS_NAME, "No serviceConfig found, cannot get default gridParentField");
+            return null;
+        }
+
+        Map<String, Object> defaults = (Map<String, Object>) serviceConfig.get("defaults");
+        if (defaults == null) {
+            LogUtil.info(CLASS_NAME, "No defaults section in serviceConfig");
+            return null;
+        }
+
+        String defaultField = (String) defaults.get("gridParentField");
+        if (defaultField != null) {
+            LogUtil.debug(CLASS_NAME, "Found default gridParentField: " + defaultField);
+        }
+        return defaultField;
+    }
+
+    /**
+     * Get the default grid parent column from service configuration defaults
+     * This is the Joget database column name with c_ prefix (e.g., "c_farmer_id")
+     *
+     * @return Default parent column name, or null if not configured
+     */
+    @SuppressWarnings("unchecked")
+    public String getDefaultGridParentColumn() {
+        Map<String, Object> serviceConfig = getServiceConfig();
+        if (serviceConfig == null) {
+            LogUtil.warn(CLASS_NAME, "No serviceConfig found, cannot get default gridParentColumn");
+            return null;
+        }
+
+        Map<String, Object> defaults = (Map<String, Object>) serviceConfig.get("defaults");
+        if (defaults == null) {
+            LogUtil.info(CLASS_NAME, "No defaults section in serviceConfig");
+            return null;
+        }
+
+        String defaultColumn = (String) defaults.get("gridParentColumn");
+        if (defaultColumn != null) {
+            LogUtil.debug(CLASS_NAME, "Found default gridParentColumn: " + defaultColumn);
+        }
+        return defaultColumn;
     }
 }

@@ -11,8 +11,7 @@ import org.joget.commons.util.LogUtil;
 import global.govstack.processing.exception.ApiProcessingException;
 import global.govstack.processing.service.ApiRequestProcessor;
 import global.govstack.processing.service.RegistrationServiceFactory;
-import global.govstack.processing.service.GovStackRegistrationServiceV2;
-import global.govstack.processing.service.GovStackRegistrationServiceV3;
+import global.govstack.processing.service.GovStackRegistrationService;
 import global.govstack.processing.service.metadata.YamlMetadataService;
 import org.joget.plugin.property.model.PropertyEditable;
 import global.govstack.processing.util.ErrorResponseUtil;
@@ -119,24 +118,23 @@ public class ProcessingAPI extends ApiPluginAbstract implements PropertyEditable
             }
 
             try {
-                // Check if we should use V3 (configuration-driven) implementation
-                String useV3 = getPropertyString("useV3");
+                // Use configuration-driven GovStack service
+                LogUtil.info(CLASS_NAME, "Using GovStackRegistrationService (configuration-driven) for service: " + configuredServiceId);
 
-                if ("true".equalsIgnoreCase(useV3)) {
-                    // Use V3 service with configuration-driven mappings
-                    LogUtil.info(CLASS_NAME, "Using GovStackRegistrationServiceV3 (configuration-driven) for service: " + configuredServiceId);
+                // Get validation settings
+                boolean enableDataQualityValidation = "true".equalsIgnoreCase(getPropertyString("enableDataQualityValidation"));
+                boolean enableConditionalValidation = "true".equalsIgnoreCase(getPropertyString("enableConditionalValidation"));
 
-                    GovStackRegistrationServiceV3 govStackService = new GovStackRegistrationServiceV3(configuredServiceId);
-                    govStackService.validateServiceId(serviceId);
-                    return govStackService;
-                } else {
-                    // Default to V2 service for backward compatibility
-                    LogUtil.info(CLASS_NAME, "Using GovStackRegistrationServiceV2 (hardcoded defaults) for service: " + configuredServiceId);
+                LogUtil.info(CLASS_NAME, "Data Quality Validation: " + (enableDataQualityValidation ? "enabled" : "disabled"));
+                LogUtil.info(CLASS_NAME, "Conditional Validation: " + (enableConditionalValidation ? "enabled" : "disabled"));
 
-                    GovStackRegistrationServiceV2 govStackService = new GovStackRegistrationServiceV2(configuredServiceId);
-                    govStackService.validateServiceId(serviceId);
-                    return govStackService;
-                }
+                GovStackRegistrationService govStackService = new GovStackRegistrationService(
+                    configuredServiceId,
+                    enableDataQualityValidation,
+                    enableConditionalValidation
+                );
+                govStackService.validateServiceId(serviceId);
+                return govStackService;
             } catch (Exception e) {
                 LogUtil.error(CLASS_NAME, e, "Error creating GovStack service: " + e.getMessage());
                 throw new RuntimeException("Failed to initialize GovStack service: " + e.getMessage(), e);

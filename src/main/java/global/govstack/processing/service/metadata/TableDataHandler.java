@@ -3,6 +3,7 @@ package global.govstack.processing.service.metadata;
 import org.joget.apps.app.model.AppDefinition;
 import org.joget.apps.app.service.AppService;
 import org.joget.apps.app.service.AppUtil;
+import org.joget.apps.form.dao.FormDataDao;
 import org.joget.apps.form.model.Form;
 import org.joget.apps.form.model.FormData;
 import org.joget.apps.form.model.FormRow;
@@ -21,6 +22,7 @@ public class TableDataHandler {
     private static final String CLASS_NAME = TableDataHandler.class.getName();
 
     private final AppService appService;
+    private final FormDataDao formDataDao;
     private final String appId;
     private final String appVersion;
     private YamlMetadataService metadataService;  // Optional for configuration support
@@ -44,6 +46,7 @@ public class TableDataHandler {
             this.appId = appDef.getId();
             this.appVersion = appDef.getVersion().toString();
             this.appService = (AppService) AppUtil.getApplicationContext().getBean("appService");
+            this.formDataDao = (FormDataDao) AppUtil.getApplicationContext().getBean("formDataDao");
             this.metadataService = metadataService;
 
             if (metadataService != null) {
@@ -74,6 +77,66 @@ public class TableDataHandler {
     }
 
     /**
+     * Delete existing grid rows for a parent ID before inserting new ones
+     * This prevents duplication when updating records - uses Joget API only
+     *
+     * @param gridName The grid name (for configuration lookup)
+     * @param formId The form ID
+     * @param tableName The table name
+     * @param parentFieldName The field name that references the parent (e.g., "farmer_id")
+     * @param parentId The parent record ID
+     */
+    private void deleteExistingGridRows(String gridName, String formId, String tableName, String parentFieldName, String parentId) {
+        try {
+            LogUtil.info(CLASS_NAME, "========================================");
+            LogUtil.info(CLASS_NAME, "DELETING EXISTING GRID ROWS");
+            LogUtil.info(CLASS_NAME, "gridName: " + gridName + ", formId: " + formId + ", tableName: " + tableName);
+            LogUtil.info(CLASS_NAME, "parentFieldName: " + parentFieldName + ", parentId: " + parentId);
+
+            // Get the database column name from configuration (no hardcoded defaults)
+            String parentColumnName = getParentColumnName(gridName);
+            LogUtil.info(CLASS_NAME, "Using parent column: " + parentColumnName);
+
+            // Use FormDataDao.find() to query rows matching the parent ID
+            // Note: WHERE clause needs the database column name (e.g., "c_farmer_id")
+            String condition = "WHERE " + parentColumnName + " = ?";
+            Object[] params = {parentId};
+
+            LogUtil.info(CLASS_NAME, "Querying with condition: " + condition);
+            LogUtil.info(CLASS_NAME, "Parameter: " + parentId);
+
+            FormRowSet rowsToDelete = formDataDao.find(formId, tableName, condition, params, null, null, null, null);
+
+            if (rowsToDelete == null || rowsToDelete.isEmpty()) {
+                LogUtil.info(CLASS_NAME, "No existing rows found in table: " + tableName + " for " + parentColumnName + " = " + parentId);
+                return;
+            }
+
+            int matchCount = rowsToDelete.size();
+            LogUtil.info(CLASS_NAME, "Found " + matchCount + " existing rows to delete");
+
+            // Log details of rows to be deleted
+            for (int i = 0; i < rowsToDelete.size(); i++) {
+                FormRow row = rowsToDelete.get(i);
+                LogUtil.info(CLASS_NAME, "  Row " + (i+1) + ": id=" + row.getId() +
+                    ", " + parentColumnName + "=" + row.getProperty(parentFieldName));
+            }
+
+            // Delete the rows using FormDataDao
+            LogUtil.info(CLASS_NAME, "Calling formDataDao.delete() to delete " + matchCount + " rows");
+            formDataDao.delete(formId, tableName, rowsToDelete);
+            LogUtil.info(CLASS_NAME, "✓ Successfully deleted " + matchCount + " existing rows");
+
+            LogUtil.info(CLASS_NAME, "========================================");
+
+        } catch (Exception e) {
+            // Log but don't fail - we still want to insert new rows even if delete fails
+            LogUtil.error(CLASS_NAME, e, "ERROR deleting existing grid rows: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
      * Save a single grid/sub-table
      * @param gridData The grid data configuration
      * @param parentId The parent record ID
@@ -91,13 +154,41 @@ public class TableDataHandler {
         try {
             LogUtil.info(CLASS_NAME, "Processing " + rows.size() + " rows for grid: " + gridName);
 
-            // Create FormRowSet for all rows - mark as multi-row for grids
-            FormRowSet rowSet = new FormRowSet();
-            rowSet.setMultiRow(true);
-
             // Determine the parent field name for this grid
             String parentFieldName = getParentFieldName(gridName);
             LogUtil.info(CLASS_NAME, "Using parent field name: " + parentFieldName + " for grid: " + gridName);
+
+            // Determine the form/table name for the grid
+            String formId = getGridFormId(gridName);
+
+            // Get table name from form
+            Form form = appService.viewDataForm(
+                appId,
+                appVersion,
+                formId,
+                null,  // saveButtonLabel
+                null,  // submitButtonLabel
+                null,  // cancelButtonLabel
+                null,  // formData
+                "#",   // formUrl
+                null   // cancelUrl
+            );
+
+            if (form == null) {
+                throw new FormSubmissionException("Form not found: " + formId);
+            }
+
+            String tableName = form.getPropertyString("tableName");
+            if (tableName == null || tableName.isEmpty()) {
+                tableName = formId;
+            }
+
+            // Delete existing rows for this parent ID (using Joget API only)
+            deleteExistingGridRows(gridName, formId, tableName, parentFieldName, parentId);
+
+            // Create new rows
+            FormRowSet rowSet = new FormRowSet();
+            rowSet.setMultiRow(true);
 
             for (Map<String, String> rowData : rows) {
                 FormRow row = new FormRow();
@@ -120,11 +211,8 @@ public class TableDataHandler {
                 rowSet.add(row);
             }
 
-            // Determine the form/table name for the grid
-            String formId = getGridFormId(gridName);
-
             try {
-                // Attempt to save the grid data - pass null for primaryKeyValue since it's multi-row
+                // Save the FormRowSet - Joget will delete marked rows and insert new ones
                 saveGridData(formId, rowSet, null);
                 LogUtil.info(CLASS_NAME, "Successfully saved " + rows.size() + " rows to grid: " + gridName);
             } catch (FormSubmissionException e) {
@@ -190,9 +278,10 @@ public class TableDataHandler {
      * Get the parent field name for a grid
      * @param gridName The grid name from metadata
      * @return The field name that stores the parent ID
+     * @throws global.govstack.processing.exception.ConfigurationException if config is missing
      */
-    private String getParentFieldName(String gridName) {
-        // First try to get from configuration if available
+    private String getParentFieldName(String gridName) throws global.govstack.processing.exception.ConfigurationException {
+        // Try grid-specific configuration first
         if (metadataService != null) {
             String configParentField = metadataService.getGridParentField(gridName);
             if (configParentField != null && !configParentField.isEmpty()) {
@@ -201,22 +290,58 @@ public class TableDataHandler {
             }
         }
 
-        // Fall back to hardcoded defaults for backward compatibility
-        // These should match the actual column names in the database tables
-        switch (gridName) {
-            case "householdMembers":
-                return "farmer_id"; // The field that links to parent farmer
-
-            case "cropManagement":
-                return "farmer_id"; // The field that links to parent farmer
-
-            case "livestockDetails":
-                return "farmer_id"; // The field that links to parent farmer
-
-            default:
-                LogUtil.warn(CLASS_NAME, "Unknown grid name for parent field: " + gridName);
-                return "parent_id"; // Default fallback
+        // Try service-level default from configuration
+        if (metadataService != null) {
+            String defaultParentField = metadataService.getDefaultGridParentField();
+            if (defaultParentField != null && !defaultParentField.isEmpty()) {
+                LogUtil.info(CLASS_NAME, "Using default parent field from config for grid " + gridName + ": " + defaultParentField);
+                return defaultParentField;
+            }
         }
+
+        // No configuration found - fail fast with helpful error message
+        throw new global.govstack.processing.exception.ConfigurationException(
+            "Missing parentField configuration for grid '" + gridName + "'. " +
+            "Add to services.yml:\n" +
+            "  serviceConfig.gridMappings." + gridName + ".parentField: \"your_field_name\"\n" +
+            "OR set a default:\n" +
+            "  serviceConfig.defaults.gridParentField: \"your_default_field_name\""
+        );
+    }
+
+    /**
+     * Get the parent column name for a grid (database column with c_ prefix)
+     * @param gridName The grid name from metadata
+     * @return The database column name that stores the parent ID (e.g., "c_farmer_id")
+     * @throws global.govstack.processing.exception.ConfigurationException if config is missing
+     */
+    private String getParentColumnName(String gridName) throws global.govstack.processing.exception.ConfigurationException {
+        // Try grid-specific configuration first
+        if (metadataService != null) {
+            String configParentColumn = metadataService.getGridParentColumn(gridName);
+            if (configParentColumn != null && !configParentColumn.isEmpty()) {
+                LogUtil.info(CLASS_NAME, "Using configured parent column for grid " + gridName + ": " + configParentColumn);
+                return configParentColumn;
+            }
+        }
+
+        // Try service-level default from configuration
+        if (metadataService != null) {
+            String defaultParentColumn = metadataService.getDefaultGridParentColumn();
+            if (defaultParentColumn != null && !defaultParentColumn.isEmpty()) {
+                LogUtil.info(CLASS_NAME, "Using default parent column from config for grid " + gridName + ": " + defaultParentColumn);
+                return defaultParentColumn;
+            }
+        }
+
+        // No configuration found - fail fast with helpful error message
+        throw new global.govstack.processing.exception.ConfigurationException(
+            "Missing parentColumn configuration for grid '" + gridName + "'. " +
+            "Add to services.yml:\n" +
+            "  serviceConfig.gridMappings." + gridName + ".parentColumn: \"c_your_column_name\"\n" +
+            "OR set a default:\n" +
+            "  serviceConfig.defaults.gridParentColumn: \"c_your_default_column_name\""
+        );
     }
 
     /**
@@ -315,5 +440,17 @@ public class TableDataHandler {
         } catch (Exception e) {
             throw new FormSubmissionException("Error saving to table " + tableName + ": " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Convert camelCase to underscore_case
+     * @param camelCase The camelCase string
+     * @return underscore_case string
+     */
+    private String camelCaseToUnderscore(String camelCase) {
+        if (camelCase == null || camelCase.isEmpty()) {
+            return camelCase;
+        }
+        return camelCase.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
     }
 }

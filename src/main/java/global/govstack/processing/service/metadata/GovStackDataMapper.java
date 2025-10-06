@@ -4,358 +4,398 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.joget.commons.util.LogUtil;
 import global.govstack.processing.exception.FormSubmissionException;
+import global.govstack.processing.util.JsonPathExtractor;
+import global.govstack.processing.service.normalization.ValueNormalizer;
+import com.fasterxml.jackson.databind.node.TextNode;
 
 import java.io.IOException;
 import java.util.*;
 
 /**
- * Service to map GovStack JSON data to Joget form fields based on YAML metadata
- * @deprecated Since v8.1 - Use {@link GovStackDataMapperV2} or {@link GovStackDataMapperV3} instead.
- *             V2 provides multi-form support with hardcoded mappings.
- *             V3 provides configuration-driven generic service support.
+ * GovStack Data Mapper that maps to multiple forms
+ * Uses configuration-driven mappings for generic service support
  */
-@Deprecated
 public class GovStackDataMapper {
     private static final String CLASS_NAME = GovStackDataMapper.class.getName();
-
     private final YamlMetadataService metadataService;
     private final DataTransformer dataTransformer;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ValueNormalizer valueNormalizer;
 
-    /**
-     * Constructor
-     * @param metadataService The metadata service
-     * @param dataTransformer The data transformer
-     */
+    // Map YAML sections to actual form IDs - now loaded from configuration
+    private Map<String, String> sectionToFormMap = null;
+
+    // Map fields to database column names for each section
+    private Map<String, Map<String, String>> fieldToColumnMappings = new HashMap<>();
+
     public GovStackDataMapper(YamlMetadataService metadataService, DataTransformer dataTransformer) {
         this.metadataService = metadataService;
         this.dataTransformer = dataTransformer;
-        this.objectMapper = new ObjectMapper();
+
+        // Initialize ValueNormalizer with metadata service for configuration-driven master data fields
+        this.valueNormalizer = new ValueNormalizer(metadataService);
+
+        // Initialize section to form map from configuration
+        initializeSectionToFormMap();
+
+        // Initialize field to column mappings
+        initializeFieldToColumnMappings();
     }
 
     /**
-     * Map GovStack JSON to Joget form fields
-     * @param govStackJson The GovStack JSON string
-     * @return Map containing main form data and array data
-     * @throws FormSubmissionException if mapping fails
+     * Initialize the section to form map from configuration or use defaults
      */
-    public Map<String, Object> mapGovStackToJoget(String govStackJson) throws FormSubmissionException {
-        try {
-            JsonNode rootNode = objectMapper.readTree(govStackJson);
+    private void initializeSectionToFormMap() {
+        // Try to load from configuration first
+        Map<String, String> configMap = metadataService.getSectionToFormMap();
 
-            // Handle both direct Person object and testData wrapper format
+        if (configMap != null && !configMap.isEmpty()) {
+            // Use configuration if available
+            this.sectionToFormMap = new HashMap<>(configMap);
+            LogUtil.info(CLASS_NAME, "Loaded section to form map from configuration: " + sectionToFormMap.size() + " mappings");
+        } else {
+            // Fall back to hardcoded defaults for backward compatibility
+            this.sectionToFormMap = new HashMap<>();
+            this.sectionToFormMap.put("farmerBasicInfo", "farmerBasicInfo");
+            this.sectionToFormMap.put("farmerLocation", "farmerLocation");
+            this.sectionToFormMap.put("farmerAgriculture", "farmerAgriculture");
+            this.sectionToFormMap.put("farmerCropsLivestock", "farmerCropsLivestock");
+            this.sectionToFormMap.put("farmerHousehold", "farmerHousehold");
+            this.sectionToFormMap.put("farmerIncomePrograms", "farmerIncomePrograms");
+            this.sectionToFormMap.put("farmerDeclaration", "farmerDeclaration");
+            LogUtil.info(CLASS_NAME, "Using default section to form map for backward compatibility");
+        }
+    }
+
+    /**
+     * Initialize field to column mappings from services.yml
+     */
+    private void initializeFieldToColumnMappings() {
+        try {
+            Map<String, Object> formMappings = metadataService.getFormMappings();
+            if (formMappings == null) {
+                LogUtil.warn(CLASS_NAME, "No formMappings found in metadata");
+                return;
+            }
+
+            for (Map.Entry<String, Object> entry : formMappings.entrySet()) {
+                String sectionName = entry.getKey();
+                Map<String, Object> section = (Map<String, Object>) entry.getValue();
+                Map<String, String> sectionColumnMap = new HashMap<>();
+
+                List<Map<String, Object>> fields = (List<Map<String, Object>>) section.get("fields");
+                if (fields != null) {
+                    for (Map<String, Object> field : fields) {
+                        String jogetField = (String) field.get("joget");
+                        String columnName = (String) field.get("column");
+
+                        if (jogetField != null) {
+                            // Use specified column or default to c_[fieldName]
+                            if (columnName == null || columnName.isEmpty()) {
+                                columnName = "c_" + jogetField;
+                            }
+                            sectionColumnMap.put(jogetField, columnName);
+                        }
+                    }
+                }
+
+                fieldToColumnMappings.put(sectionName, sectionColumnMap);
+                LogUtil.info(CLASS_NAME, "Loaded column mappings for " + sectionName + ": " + sectionColumnMap.size() + " fields");
+            }
+        } catch (Exception e) {
+            LogUtil.error(CLASS_NAME, e, "Error initializing field to column mappings: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Map GovStack data to multiple Joget forms
+     * @return Map with:
+     *   - "formData": Map<formId, Map<field, value>>
+     *   - "arrayData": List of array/grid data
+     *   - "primaryKey": The shared primary key
+     */
+    public Map<String, Object> mapToMultipleForms(String jsonData) throws FormSubmissionException {
+        try {
+            JsonNode rootNode = objectMapper.readTree(jsonData);
             JsonNode dataNode = rootNode;
 
-            // Check if this is the testData wrapper format
+            // Handle testData wrapper if present
             if (rootNode.has("testData") && rootNode.get("testData").isArray()) {
                 JsonNode testDataArray = rootNode.get("testData");
                 if (testDataArray.size() > 0) {
-                    dataNode = testDataArray.get(0); // Get the first farmer record
-                    LogUtil.info(CLASS_NAME, "Detected testData wrapper format, processing first farmer record");
-                } else {
-                    throw new FormSubmissionException("testData array is empty");
+                    dataNode = testDataArray.get(0);
+                    LogUtil.info(CLASS_NAME, "Detected testData wrapper format");
                 }
             }
 
             Map<String, Object> result = new HashMap<>();
-            Map<String, String> mainFormData = new HashMap<>();
+            Map<String, Map<String, String>> formData = new HashMap<>();
             List<Map<String, Object>> arrayData = new ArrayList<>();
+
+            // Generate primary key from ID or create new one
+            String primaryKey = null;
+            if (dataNode.has("id")) {
+                primaryKey = dataNode.get("id").asText();
+            }
+            if (primaryKey == null || primaryKey.trim().isEmpty()) {
+                primaryKey = UUID.randomUUID().toString();
+            }
+            result.put("primaryKey", primaryKey);
 
             // Process all form sections
             Map<String, Object> allMappings = metadataService.getAllFormMappings();
 
-            LogUtil.info(CLASS_NAME, "Total sections to process: " + allMappings.size());
-
             for (Map.Entry<String, Object> entry : allMappings.entrySet()) {
                 String sectionName = entry.getKey();
                 Map<String, Object> section = (Map<String, Object>) entry.getValue();
+                String sectionType = (String) section.get("type");
 
-                LogUtil.debug(CLASS_NAME, "Processing section: " + sectionName);
+                LogUtil.debug(CLASS_NAME, "Checking section: " + sectionName + " (type: " + sectionType + ")");
 
-                if ("array".equals(section.get("type"))) {
-                    // Handle array data (household members, etc.)
-                    LogUtil.info(CLASS_NAME, "Processing array section: " + sectionName);
+                if ("array".equals(sectionType)) {
+                    // Handle array data (household members, crops, livestock)
+                    LogUtil.info(CLASS_NAME, "Found array section: " + sectionName);
                     Map<String, Object> arrayResult = processArraySection(dataNode, sectionName, section);
                     if (arrayResult != null) {
                         arrayData.add(arrayResult);
-                        LogUtil.info(CLASS_NAME, "Added array data for: " + sectionName);
+                        LogUtil.info(CLASS_NAME, "Added array result for: " + sectionName);
                     } else {
-                        LogUtil.warn(CLASS_NAME, "No data found for array section: " + sectionName);
+                        LogUtil.info(CLASS_NAME, "No array result for: " + sectionName);
                     }
                 } else {
                     // Handle regular form fields
+                    String formId = sectionToFormMap.get(sectionName);
+                    if (formId == null) {
+                        LogUtil.warn(CLASS_NAME, "No form mapping for section: " + sectionName);
+                        continue;
+                    }
+
+                    // Get or create form data map
+                    Map<String, String> currentFormData = formData.computeIfAbsent(formId, k -> new HashMap<>());
+
+                    // Always add parent_id to link to main form
+                    currentFormData.put("parent_id", primaryKey);
+
+                    // Process fields
                     List<Map<String, Object>> fields = (List<Map<String, Object>>) section.get("fields");
                     if (fields != null) {
-                        int fieldsBefore = mainFormData.size();
-                        processFields(dataNode, fields, mainFormData);
-                        int fieldsAfter = mainFormData.size();
-                        LogUtil.debug(CLASS_NAME, "Section " + sectionName + " added " + (fieldsAfter - fieldsBefore) + " fields");
-                    } else {
-                        LogUtil.debug(CLASS_NAME, "No fields in section: " + sectionName);
+                        processFields(dataNode, sectionName, fields, currentFormData);
+                        LogUtil.info(CLASS_NAME, "Processed " + currentFormData.size() + " fields for form: " + formId);
                     }
                 }
             }
 
-            result.put("mainForm", mainFormData);
+            result.put("formData", formData);
             result.put("arrayData", arrayData);
 
-            LogUtil.info(CLASS_NAME, "Successfully mapped " + mainFormData.size() + " main form fields and " + arrayData.size() + " array sections");
+            // Log summary
+            LogUtil.info(CLASS_NAME, "Mapped data to " + formData.size() + " forms with " + arrayData.size() + " array sections");
+            for (Map.Entry<String, Map<String, String>> e : formData.entrySet()) {
+                LogUtil.info(CLASS_NAME, "  Form " + e.getKey() + ": " + e.getValue().size() + " fields");
+            }
 
             return result;
 
-        } catch (IOException e) {
-            throw new FormSubmissionException("Error parsing GovStack JSON: " + e.getMessage(), e);
         } catch (Exception e) {
             throw new FormSubmissionException("Error mapping GovStack data: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Process regular form fields
-     * @param rootNode The JSON root node
-     * @param fields The field mappings
-     * @param formData The map to store form data
-     */
-    private void processFields(JsonNode rootNode, List<Map<String, Object>> fields, Map<String, String> formData) {
-        for (Map<String, Object> fieldMapping : fields) {
-            String jogetField = (String) fieldMapping.get("joget");
-            String govstackPath = (String) fieldMapping.get("govstack");
-            String transform = (String) fieldMapping.get("transform");
-            Map<String, String> valueMapping = extractValueMapping(fieldMapping);
+    private void processFields(JsonNode dataNode, String sectionName, List<Map<String, Object>> fields, Map<String, String> targetData) {
+        for (Map<String, Object> field : fields) {
+            String jogetField = (String) field.get("joget");
+            String govstackPath = (String) field.get("govstack");
+            String jsonPath = (String) field.get("jsonPath");  // New: check for explicit jsonPath
 
             if (jogetField == null || govstackPath == null) {
                 continue;
             }
 
-            // Extract value from JSON using path
-            JsonNode valueNode = extractValueFromPath(rootNode, govstackPath);
+            try {
+                // Use jsonPath if specified, otherwise fall back to govstackPath
+                String extractPath = jsonPath != null ? jsonPath : govstackPath;
 
-            if (valueNode != null && !valueNode.isNull()) {
-                String value = extractStringValue(valueNode);
-
-                // Apply value mapping if exists
-                if (valueMapping != null && !valueMapping.isEmpty()) {
-                    value = dataTransformer.applyValueMapping(value, valueMapping);
+                // Enhanced logging for debugging
+                if ("agriculturalManagementSkills".equals(jogetField)) {
+                    LogUtil.info(CLASS_NAME, "Processing agriculturalManagementSkills:");
+                    LogUtil.info(CLASS_NAME, "  - jsonPath: " + jsonPath);
+                    LogUtil.info(CLASS_NAME, "  - govstackPath: " + govstackPath);
+                    LogUtil.info(CLASS_NAME, "  - extractPath: " + extractPath);
                 }
 
-                // Apply transformation if exists
-                if (transform != null && !transform.isEmpty()) {
-                    value = dataTransformer.transformValue(value, transform);
+                String value = JsonPathExtractor.extractValue(dataNode, extractPath);
+
+                if ("agriculturalManagementSkills".equals(jogetField)) {
+                    LogUtil.info(CLASS_NAME, "  - Extracted value: " + value);
                 }
 
-                formData.put(jogetField, value);
-                LogUtil.debug(CLASS_NAME, "Mapped field: " + jogetField + " = " + value);
-            } else {
-                LogUtil.debug(CLASS_NAME, "Field not found or null: " + jogetField + " at path: " + govstackPath);
-            }
-
-            // Handle additional type fields (e.g., for identifiers and telecom)
-            String govstackType = (String) fieldMapping.get("govstackType");
-            String typeValue = (String) fieldMapping.get("typeValue");
-
-            if (govstackType != null && typeValue != null) {
-                // This handles special cases like identifiers with type checking
-                JsonNode typeNode = extractValueFromPath(rootNode, govstackType);
-                if (typeNode != null && typeValue.equals(extractStringValue(typeNode))) {
-                    // Type matches, value already processed above
-                    LogUtil.debug(CLASS_NAME, "Type validated for field: " + jogetField);
+                // Apply transformations (check both "transform" and "transformation" for compatibility)
+                String transformation = (String) field.get("transform");
+                if (transformation == null) {
+                    transformation = (String) field.get("transformation");
                 }
+                if (transformation != null && value != null) {
+                    value = dataTransformer.transformValue(value, transformation);
+                }
+
+                // Value mappings are now handled by ValueNormalizer
+
+                if (value != null && !value.isEmpty()) {
+                    // IMPORTANT: Use field name, not column name for targetData
+                    // Joget will automatically add c_ prefix when saving to database
+                    targetData.put(jogetField, value);
+
+                    if ("agriculturalManagementSkills".equals(jogetField)) {
+                        LogUtil.info(CLASS_NAME, "  - Added to targetData with field '" + jogetField + "' and value: " + value);
+                    }
+                } else if ("agriculturalManagementSkills".equals(jogetField)) {
+                    LogUtil.info(CLASS_NAME, "  - NOT added to targetData (value is null or empty)");
+                }
+
+            } catch (Exception e) {
+                LogUtil.debug(CLASS_NAME, "Could not extract value for " + jogetField + ": " + e.getMessage());
             }
         }
     }
 
     /**
-     * Process array section (household members, crops, etc.)
-     * @param rootNode The JSON root node
-     * @param sectionName The section name
-     * @param section The section configuration
-     * @return Map containing array data
+     * Get the database column name for a field, using column mapping if specified
      */
-    private Map<String, Object> processArraySection(JsonNode rootNode, String sectionName, Map<String, Object> section) {
+    private String getColumnName(String sectionName, String fieldName) {
+        Map<String, String> sectionMappings = fieldToColumnMappings.get(sectionName);
+        if (sectionMappings != null && sectionMappings.containsKey(fieldName)) {
+            return sectionMappings.get(fieldName);
+        }
+        // Default to field name if no mapping found
+        // Joget will add c_ prefix automatically when saving to database
+        return fieldName;
+    }
+
+    private Map<String, Object> processArraySection(JsonNode dataNode, String sectionName, Map<String, Object> section) {
+        LogUtil.info(CLASS_NAME, "Processing array section: " + sectionName);
+
         String govstackPath = (String) section.get("govstack");
-        String jogetGrid = (String) section.get("jogetGrid");
-        List<Map<String, Object>> fieldMappings = (List<Map<String, Object>>) section.get("fields");
-
-        if (govstackPath == null || jogetGrid == null || fieldMappings == null) {
-            LogUtil.debug(CLASS_NAME, "Missing configuration for array section " + sectionName +
-                         ": govstackPath=" + govstackPath + ", jogetGrid=" + jogetGrid +
-                         ", fieldMappings=" + (fieldMappings != null ? fieldMappings.size() : "null"));
+        if (govstackPath == null) {
+            LogUtil.warn(CLASS_NAME, "No govstack path for array section: " + sectionName);
             return null;
         }
 
-        JsonNode arrayNode = extractValueFromPath(rootNode, govstackPath);
-        if (arrayNode == null) {
-            LogUtil.warn(CLASS_NAME, "Array node not found at path: " + govstackPath);
-            // Debug: Let's check what paths exist
-            if (govstackPath.contains(".")) {
-                String[] parts = govstackPath.split("\\.");
-                JsonNode current = rootNode;
-                StringBuilder pathSoFar = new StringBuilder();
-                for (String part : parts) {
-                    pathSoFar.append(part);
-                    if (current != null) {
-                        current = current.get(part);
-                        if (current == null) {
-                            LogUtil.warn(CLASS_NAME, "  Path breaks at: " + pathSoFar.toString());
-                            break;
-                        } else {
-                            LogUtil.debug(CLASS_NAME, "  Path OK at: " + pathSoFar.toString() + " (type: " + current.getNodeType() + ")");
-                        }
-                    }
-                    pathSoFar.append(".");
-                }
-            }
-            return null;
-        }
-        if (!arrayNode.isArray()) {
-            LogUtil.warn(CLASS_NAME, "Node at path " + govstackPath + " is not an array: " + arrayNode.getNodeType());
-            return null;
-        }
+        // Check for control field (e.g., hasLivestock for livestockDetails)
+        String controlField = (String) section.get("controlField");
+        String controlValue = (String) section.get("controlValue");
+        if (controlField != null && controlValue != null) {
+            String actualValue = JsonPathExtractor.extractValue(dataNode, controlField);
+            LogUtil.info(CLASS_NAME, "Checking control field '" + controlField + "': expected '" + controlValue + "', actual '" + actualValue + "'");
 
-        List<Map<String, String>> rows = new ArrayList<>();
-
-        for (JsonNode itemNode : arrayNode) {
-            Map<String, String> row = new HashMap<>();
-
-            for (Map<String, Object> fieldMapping : fieldMappings) {
-                String jogetField = (String) fieldMapping.get("joget");
-                String itemPath = (String) fieldMapping.get("govstack");
-                String transform = (String) fieldMapping.get("transform");
-                Map<String, String> valueMapping = extractValueMapping(fieldMapping);
-
-                if (jogetField == null || itemPath == null) {
-                    continue;
-                }
-
-                JsonNode valueNode = extractValueFromPath(itemNode, itemPath);
-
-                if (valueNode != null && !valueNode.isNull()) {
-                    String value = extractStringValue(valueNode);
-
-                    // Apply value mapping
-                    if (valueMapping != null && !valueMapping.isEmpty()) {
-                        value = dataTransformer.applyValueMapping(value, valueMapping);
-                    }
-
-                    // Apply transformation
-                    if (transform != null && !transform.isEmpty()) {
-                        value = dataTransformer.transformValue(value, transform);
-                    }
-
-                    row.put(jogetField, value);
+            // More flexible control field checking
+            boolean shouldProcess = false;
+            if (actualValue != null) {
+                // Check for various "yes" representations
+                if ("yes".equalsIgnoreCase(controlValue)) {
+                    shouldProcess = "yes".equalsIgnoreCase(actualValue) ||
+                                   "true".equalsIgnoreCase(actualValue) ||
+                                   "1".equals(actualValue) ||
+                                   Boolean.TRUE.toString().equals(actualValue);
+                } else {
+                    shouldProcess = controlValue.equals(actualValue);
                 }
             }
 
-            if (!row.isEmpty()) {
-                rows.add(row);
+            if (!shouldProcess) {
+                LogUtil.info(CLASS_NAME, "Control field check failed for " + sectionName + ", skipping array");
+                return null;
             }
+            LogUtil.info(CLASS_NAME, "Control field check passed for " + sectionName);
         }
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("gridName", jogetGrid);
-        result.put("rows", rows);
+        LogUtil.info(CLASS_NAME, "Looking for array at path: " + govstackPath);
 
-        LogUtil.info(CLASS_NAME, "Processed " + rows.size() + " rows for grid: " + jogetGrid);
+        try {
+            JsonNode arrayNode = JsonPathExtractor.extractNode(dataNode, govstackPath);
 
-        return result;
-    }
-
-    /**
-     * Extract value from JSON using dot notation path
-     * @param node The starting node
-     * @param path The path (e.g., "name.given[0]", "address[0].district")
-     * @return The JsonNode at the path, or null if not found
-     */
-    private JsonNode extractValueFromPath(JsonNode node, String path) {
-        if (node == null || path == null || path.isEmpty()) {
-            return null;
-        }
-
-        String[] parts = path.split("\\.");
-        JsonNode current = node;
-
-        for (String part : parts) {
-            if (current == null || current.isNull()) {
+            if (arrayNode == null) {
+                LogUtil.info(CLASS_NAME, "No node found at path: " + govstackPath);
+                // Try to debug what's at the parent path
+                if (govstackPath.contains(".")) {
+                    String parentPath = govstackPath.substring(0, govstackPath.lastIndexOf("."));
+                    JsonNode parentNode = JsonPathExtractor.extractNode(dataNode, parentPath);
+                    if (parentNode != null) {
+                        LogUtil.info(CLASS_NAME, "Parent node at '" + parentPath + "' exists, fields: " + parentNode.fieldNames());
+                    }
+                }
                 return null;
             }
 
-            // Handle array notation
-            if (part.contains("[") && part.contains("]")) {
-                int bracketIndex = part.indexOf("[");
-                String fieldName = part.substring(0, bracketIndex);
-                String indexStr = part.substring(bracketIndex + 1, part.length() - 1);
+            if (!arrayNode.isArray()) {
+                LogUtil.info(CLASS_NAME, "Node at path " + govstackPath + " is not an array, type: " + arrayNode.getNodeType());
+                return null;
+            }
 
-                try {
-                    int index = Integer.parseInt(indexStr);
-                    current = current.get(fieldName);
+            if (arrayNode.size() == 0) {
+                LogUtil.info(CLASS_NAME, "Array at path " + govstackPath + " is empty");
+                return null;
+            }
 
-                    if (current != null && current.isArray() && index < current.size()) {
-                        current = current.get(index);
-                    } else {
-                        return null;
+            LogUtil.info(CLASS_NAME, "Found array with " + arrayNode.size() + " items at path: " + govstackPath);
+
+            List<Map<String, String>> rows = new ArrayList<>();
+            List<Map<String, Object>> fields = (List<Map<String, Object>>) section.get("fields");
+
+            for (JsonNode item : arrayNode) {
+                Map<String, String> row = new HashMap<>();
+
+                if (fields != null) {
+                    for (Map<String, Object> field : fields) {
+                        String jogetField = (String) field.get("joget");
+                        String itemPath = (String) field.get("govstack");
+                        String jsonPath = (String) field.get("jsonPath");
+
+                        if (jogetField != null && itemPath != null) {
+                            // Try multiple paths: first jsonPath, then govstack path
+                            JsonNode valueNode = null;
+
+                            // Try jsonPath first
+                            if (jsonPath != null) {
+                                valueNode = JsonPathExtractor.extractNode(item, jsonPath);
+                            }
+
+                            // If not found, try govstack path
+                            if ((valueNode == null || valueNode.isNull()) && itemPath != null) {
+                                valueNode = JsonPathExtractor.extractNode(item, itemPath);
+                            }
+
+                            if (valueNode != null && !valueNode.isNull()) {
+                                // Normalize the value based on field name
+                                String value = valueNormalizer.normalizeToLOV(valueNode, jogetField);
+
+                                if (value != null && !value.isEmpty()) {
+                                    row.put(jogetField, value);
+                                }
+                            }
+                        }
                     }
-                } catch (NumberFormatException e) {
-                    LogUtil.warn(CLASS_NAME, "Invalid array index in path: " + part);
-                    return null;
                 }
+
+                if (!row.isEmpty()) {
+                    rows.add(row);
+                }
+            }
+
+            if (!rows.isEmpty()) {
+                Map<String, Object> result = new HashMap<>();
+                result.put("gridName", sectionName);
+                result.put("rows", rows);
+                LogUtil.info(CLASS_NAME, "Successfully processed " + rows.size() + " rows for array section: " + sectionName);
+                return result;
             } else {
-                // Regular field access
-                current = current.get(part);
+                LogUtil.info(CLASS_NAME, "No rows extracted from array section: " + sectionName);
             }
+
+        } catch (Exception e) {
+            LogUtil.warn(CLASS_NAME, "Error processing array section " + sectionName + ": " + e.getMessage());
         }
 
-        return current;
-    }
-
-    /**
-     * Extract string value from JsonNode
-     * @param node The JsonNode
-     * @return String representation of the node
-     */
-    private String extractStringValue(JsonNode node) {
-        if (node == null || node.isNull()) {
-            return "";
-        }
-
-        if (node.isTextual()) {
-            return node.asText();
-        }
-
-        if (node.isNumber()) {
-            return node.asText();
-        }
-
-        if (node.isBoolean()) {
-            return node.asBoolean() ? "true" : "false";
-        }
-
-        if (node.isArray()) {
-            List<String> values = new ArrayList<>();
-            for (JsonNode item : node) {
-                values.add(extractStringValue(item));
-            }
-            return String.join(",", values);
-        }
-
-        // For objects, return as JSON string
-        return node.toString();
-    }
-
-    /**
-     * Extract value mapping from field configuration
-     * @param fieldMapping The field mapping configuration
-     * @return Map of value mappings
-     */
-    private Map<String, String> extractValueMapping(Map<String, Object> fieldMapping) {
-        Object valueMapping = fieldMapping.get("valueMapping");
-        if (valueMapping instanceof Map) {
-            Map<String, String> result = new HashMap<>();
-            Map<?, ?> map = (Map<?, ?>) valueMapping;
-            for (Map.Entry<?, ?> entry : map.entrySet()) {
-                result.put(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
-            }
-            return result;
-        }
+        LogUtil.info(CLASS_NAME, "Returning null for array section: " + sectionName);
         return null;
     }
 }

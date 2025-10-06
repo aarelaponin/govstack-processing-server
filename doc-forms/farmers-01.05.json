@@ -30,32 +30,6 @@
                 {
                     "elements": [
                         {
-                            "className": "org.joget.apps.form.lib.HiddenField",
-                            "properties": {
-                                "useDefaultWhenEmpty": "",
-                                "id": "parent_id",
-                                "value": "",
-                                "validator": {
-                                    "className": "",
-                                    "properties": {}
-                                },
-                                "workflowVariable": ""
-                            }
-                        },
-                        {
-                            "className": "org.joget.apps.form.lib.HiddenField",
-                            "properties": {
-                                "useDefaultWhenEmpty": "",
-                                "id": "crops_livestock_key",
-                                "value": "#form.farmerRegistrationForm.id#",
-                                "validator": {
-                                    "className": "",
-                                    "properties": {}
-                                },
-                                "workflowVariable": ""
-                            }
-                        },
-                        {
                             "className": "org.joget.apps.form.lib.CustomHTML",
                             "properties": {
                                 "id": "cropInstruction",

@@ -1,0 +1,26 @@
+# Validation Rules for GovStack Registration Building Block
+# This file defines conditional validation rules that are loaded dynamically
+
+validation_rules:
+  # Conditional validations - if condition is true, then required fields/grids must be present
+  conditional_validations:
+    # If farmer engages in crop production, they must provide crop details
+    - condition: "cropProduction == 'yes'"
+      required_grids: ["cropManagement"]
+      min_entries: 1
+      message: "At least 1 crop entry is required when crop production is 'yes'"
+
+    # If farmer has livestock, they must provide livestock details
+    - condition: "hasLivestock == 'yes'"
+      required_grids: ["livestockDetails"]
+      message: "Livestock details are required when hasLivestock is 'yes'"
+
+    # If farmer has gainful employment, government employment status is required
+    - condition: "gainfulEmployment == 'yes'"
+      required_fields: ["governmentEmployed"]
+      message: "Government employment status is required when gainful employment is 'yes'"
+
+    # If farmer receives relative support, support details are required
+    - condition: "relativeSupport == 'yes'"
+      required_fields: ["supportFrequency", "supportType"]
+      message: "Support frequency and type are required when relative support is 'yes'"
