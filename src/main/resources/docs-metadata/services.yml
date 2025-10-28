@@ -3,6 +3,9 @@ service:
   name: "Farmers Registry Service"
   version: "1.0"
   govstackVersion: "1.0"
+  metadataVersion: "1.0.0"  # Semantic version for configuration compatibility tracking
+  metadataCompatibility: "1.0.x"  # Compatible with all 1.0.x versions
+  lastUpdated: "2025-10-28"  # Last configuration update date
 
   # Service configuration for making the plugin generic
   # These settings allow the plugin to work with any service type, not just farmers

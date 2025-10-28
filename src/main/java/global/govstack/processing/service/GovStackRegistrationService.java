@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import global.govstack.processing.exception.*;
 import global.govstack.processing.service.metadata.*;
 import global.govstack.processing.service.validation.ServiceMetadataValidator;
-import global.govstack.processing.validation.*;
 import org.joget.commons.util.LogUtil;
 import org.joget.commons.util.UuidGenerator;
 import org.json.JSONObject;
@@ -28,18 +27,9 @@ public class GovStackRegistrationService implements ApiRequestProcessor {
     private final GovStackDataMapper dataMapper;
     private final TableDataHandler tableDataHandler;
     private final MultiFormSubmissionManager multiFormManager;
-    private final DataQualityValidator dataQualityValidator;
-    private final boolean enableDataQualityValidation;
-    private final boolean enableConditionalValidation;
 
     public GovStackRegistrationService(String serviceId) throws ConfigurationException {
-        this(serviceId, true, true);
-    }
-
-    public GovStackRegistrationService(String serviceId, boolean enableDataQualityValidation, boolean enableConditionalValidation) throws ConfigurationException {
         this.serviceId = serviceId;
-        this.enableDataQualityValidation = enableDataQualityValidation;
-        this.enableConditionalValidation = enableConditionalValidation;
 
         try {
             // Initialize services
@@ -49,9 +39,8 @@ public class GovStackRegistrationService implements ApiRequestProcessor {
             this.serviceValidator = new ServiceValidator(serviceId);
             DataTransformer dataTransformer = new DataTransformer();
             this.dataMapper = new GovStackDataMapper(metadataService, dataTransformer);
-            this.tableDataHandler = new TableDataHandler(metadataService);  // Pass metadata service for configuration support
+            this.tableDataHandler = new TableDataHandler(metadataService);
             this.multiFormManager = new MultiFormSubmissionManager();
-            this.dataQualityValidator = enableDataQualityValidation ? new DataQualityValidator() : null;
 
             // Validate services.yml against database schema
             validateMetadataConfiguration();
@@ -103,41 +92,11 @@ public class GovStackRegistrationService implements ApiRequestProcessor {
             // Validate request
             validateRequest(requestBody);
 
+            // Check metadata version compatibility
+            checkMetadataVersionCompatibility(requestBody);
+
             // Map GovStack data to multiple Joget forms
             Map<String, Object> mappedData = dataMapper.mapToMultipleForms(requestBody);
-
-            // Validate data quality if enabled
-            if (enableDataQualityValidation && dataQualityValidator != null) {
-                ValidationResult validationResult = dataQualityValidator.validateJson(requestBody);
-                if (!validationResult.isValid()) {
-                    LogUtil.warn(CLASS_NAME, "Data quality validation failed: " + validationResult.getSummary());
-                    // Return validation errors in response
-                    return buildValidationErrorResponse(validationResult);
-                }
-                LogUtil.info(CLASS_NAME, "Data quality validation passed");
-            } else {
-                LogUtil.info(CLASS_NAME, "Data quality validation disabled");
-            }
-
-            // Conditional validation if enabled
-            if (enableConditionalValidation) {
-                // Parse JSON to Map for conditional validation
-                ObjectMapper objectMapper = new ObjectMapper();
-                Map<String, Object> dataMap = objectMapper.readValue(requestBody, Map.class);
-
-                // Load conditional validation rules from configuration
-                ValidationRuleLoader ruleLoader = new ValidationRuleLoader();
-                List<ValidationRuleLoader.ConditionalValidationRule> rules = ruleLoader.getConditionalValidationRules();
-
-                ValidationResult conditionalResult = ConditionalValidator.validateAllConditionals(dataMap, rules);
-                if (!conditionalResult.isValid()) {
-                    LogUtil.warn(CLASS_NAME, "Conditional validation failed: " + conditionalResult.getSummary());
-                    return buildValidationErrorResponse(conditionalResult);
-                }
-                LogUtil.info(CLASS_NAME, "Conditional validation passed");
-            } else {
-                LogUtil.info(CLASS_NAME, "Conditional validation disabled");
-            }
 
             // Extract components
             Map<String, Map<String, String>> formData = (Map<String, Map<String, String>>) mappedData.get("formData");
@@ -243,32 +202,75 @@ public class GovStackRegistrationService implements ApiRequestProcessor {
     }
 
     /**
-     * Build validation error response
+     * Check metadata version compatibility between client and server
+     * Logs a warning if versions don't match, but doesn't fail the request
      */
-    private JSONObject buildValidationErrorResponse(ValidationResult validationResult) {
-        JSONObject response = new JSONObject();
+    private void checkMetadataVersionCompatibility(String requestBody) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            Map<String, Object> request = mapper.readValue(requestBody, Map.class);
 
-        response.put("success", false);
-        response.put("status", "validation_failed");
-        response.put("errorCount", validationResult.getErrorCount());
+            String clientMetadataVersion = (String) request.get("metadataVersion");
+            if (clientMetadataVersion != null) {
+                String serverMetadataVersion = metadataService.getMetadataVersion();
 
-        // Add error details
-        JSONArray errors = new JSONArray();
-        for (ValidationError error : validationResult.getErrors()) {
-            JSONObject errorObj = new JSONObject();
-            errorObj.put("field", error.getField());
-            errorObj.put("message", error.getMessage());
-            errorObj.put("type", error.getType().toString());
-            if (error.getFormId() != null) {
-                errorObj.put("formId", error.getFormId());
+                if (!isCompatible(clientMetadataVersion, serverMetadataVersion)) {
+                    String warning = String.format(
+                        "Metadata version mismatch detected. Client: %s, Server: %s. " +
+                        "This may cause processing issues. Please sync configuration.",
+                        clientMetadataVersion, serverMetadataVersion
+                    );
+                    LogUtil.warn(CLASS_NAME, warning);
+                    // Don't fail - log warning and continue (backward compatibility)
+                } else {
+                    LogUtil.info(CLASS_NAME, String.format(
+                        "Metadata version check passed. Client: %s, Server: %s",
+                        clientMetadataVersion, serverMetadataVersion
+                    ));
+                }
+            } else {
+                LogUtil.info(CLASS_NAME, "No metadataVersion in request - skipping version check (legacy client)");
             }
-            errors.put(errorObj);
+        } catch (Exception e) {
+            LogUtil.warn(CLASS_NAME, "Failed to check metadata version compatibility: " + e.getMessage());
+            // Don't fail the request due to version check issues
         }
-        response.put("errors", errors);
+    }
 
-        response.put("message", "Data validation failed. Please correct the errors and try again.");
-        response.put("timestamp", System.currentTimeMillis());
+    /**
+     * Check if two metadata versions are compatible
+     * Uses semantic versioning: major.minor.patch
+     * Compatible if major.minor match (patch differences allowed)
+     */
+    private boolean isCompatible(String clientVersion, String serverVersion) {
+        if (clientVersion == null || serverVersion == null) {
+            return false;
+        }
 
-        return response;
+        if (clientVersion.equals(serverVersion)) {
+            return true;
+        }
+
+        try {
+            // Extract major.minor (ignore patch)
+            String clientMajorMinor = getMajorMinor(clientVersion);
+            String serverMajorMinor = getMajorMinor(serverVersion);
+
+            return clientMajorMinor.equals(serverMajorMinor);
+        } catch (Exception e) {
+            LogUtil.warn(CLASS_NAME, "Failed to parse version strings for compatibility check: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Extract major.minor from semantic version
+     */
+    private String getMajorMinor(String version) {
+        int lastDot = version.lastIndexOf('.');
+        if (lastDot > 0) {
+            return version.substring(0, lastDot);
+        }
+        return version;
     }
 }

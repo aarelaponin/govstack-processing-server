@@ -27,9 +27,11 @@ This is a Joget OSGi plugin for GovStack farmer registration processing. The cod
 
 ### Core Components
 
-**Bundle Activator**: `global.govstack.Activator` - OSGi bundle entry point that registers the ProcessingAPI service
+**Bundle Activator**: `global.govstack.Activator` - OSGi bundle entry point that registers service providers
 
-**Main API Endpoint**: `ProcessingAPI` class extends `ApiPluginAbstract` and serves as the main REST API interface for the registration system
+**Base Service Provider**: `BaseServiceProvider` - Abstract base class providing generic request/response handling, error management, and user context management for all API plugins
+
+**Main API Endpoint**: `RegistrationServiceProvider` - Extends `BaseServiceProvider` and serves as the main REST API interface for the farmer registration system
 
 **Service Layer Architecture**:
 - `ApiRequestProcessor` - Generic interface for request processing

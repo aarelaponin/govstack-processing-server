@@ -1,14 +1,16 @@
 # GovStack Processing Server Plugin (ProcessingAPI)
 
-A Joget DX8 plugin for GovStack Registration Building Block that receives GovStack JSON data via HTTP API, validates it, maps it to Joget forms, and saves it to the database.
+A Joget DX8 plugin for GovStack Registration Building Block that receives GovStack JSON data via HTTP API, maps it to Joget forms, and saves it to the database. This plugin is a **transport layer** that handles data transformation between GovStack and Joget formats.
 
 ## Overview
 
 This plugin is the **receiver component** in a two-part architecture:
 - **DocSubmitter** (sender) - Extracts Joget form data, transforms to GovStack JSON, sends to Processing API
-- **ProcessingAPI** (this plugin) - Receives GovStack JSON, validates, maps to Joget forms, saves to database
+- **ProcessingAPI** (this plugin) - Receives GovStack JSON, maps to Joget forms, saves to database
 
 Together they enable bidirectional data exchange between Joget instances using GovStack Registration Building Block standards.
+
+**Design Philosophy**: These plugins are **transport-layer only**. All business validation is done in Joget forms using native validation tools. The plugins validate only structure/metadata compliance, not business data.
 
 ## Features
 
@@ -17,7 +19,7 @@ Together they enable bidirectional data exchange between Joget instances using G
 - **Automatic Field Transformation** - Handles dates, numbers, checkboxes, master data lookups
 - **Grid/Subform Support** - Processes parent-child relationships (farmer → crops, livestock)
 - **Field Normalization** - Converts yes/no ↔ 1/2 formats automatically
-- **Validation Rules** - Enforces conditional requirements via `validation-rules.yaml`
+- **Metadata Version Validation** - Ensures sender/receiver configuration compatibility
 - **Generic Service Support** - Configure for ANY service type (farmers, students, patients, products)
 - **Configuration Generators** - Auto-generate configuration from minimal hints (92% time savings)
 - **Multi-Service Support** - Deploy multiple services to same Joget instance
@@ -162,20 +164,21 @@ processing-server/
 │   ├── service/
 │   │   ├── GovStackDataMapperV2.java             # Maps GovStack JSON to Joget forms
 │   │   ├── metadata/MetadataService.java         # Loads services.yml configuration
-│   │   └── normalization/FieldNormalizer.java    # Transforms field values
-│   ├── validation/ValidationService.java         # Validates business rules
+│   │   ├── normalization/FieldNormalizer.java    # Transforms field values
+│   │   └── validation/ServiceMetadataValidator.java  # Validates config against DB schema
 │   └── lib/                                      # Utility libraries
 ├── src/main/resources/docs-metadata/
 │   ├── services.yml                               # Field mappings configuration (shared)
-│   ├── validation-rules.yaml                      # Business validation rules
 │   ├── form_structure.yaml                        # Form metadata
 │   └── test-data.json                             # Test data
 ├── doc-forms/                                     # Joget form definitions (JSON)
 ├── docs/                                          # Documentation
 │   ├── INDEX.md                                   # Documentation index
 │   ├── GENERIC_CONFIGURATION.md                   # Multi-service configuration
-│   ├── SERVICES_YML_GUIDE.md                      # services.yml reference
-│   └── VALIDATION_TOOL.md                         # Validation framework
+│   └── SERVICES_YML_GUIDE.md                      # services.yml reference
+├── ARCHITECTURE.md                                # Transport-layer architecture explanation
+├── TODO.md                                        # Future improvements
+├── CONFIGURATION_SYNC.md                          # Configuration synchronization guide
 └── target/processing-server-8.1-SNAPSHOT.jar      # Built plugin
 ```
 
@@ -248,7 +251,7 @@ The plugin creates/updates these tables (for farmer registry example):
 
 ## Configuring a New Service
 
-### Option 1: Quick Start with Generators (15 minutes)
+### Option 1: Quick Start with Generators (10 minutes)
 
 From the doc-submitter directory:
 ```bash
@@ -256,21 +259,18 @@ cd ../doc-submitter
 
 # 1. Copy templates
 cp templates/mapping-hints-template.yaml patient-hints.yaml
-cp templates/business-rules-template.yaml patient-rules.yaml
 
 # 2. Edit hints (10 minutes)
 vim patient-hints.yaml  # Set service ID, map key fields
 
-# 3. Edit rules (5 minutes)
-vim patient-rules.yaml  # Define validation logic
+# 3. Generate (2 seconds)
+./generate-config.sh patient-hints.yaml
 
-# 4. Generate (2 seconds)
-./generate-config.sh patient-hints.yaml patient-rules.yaml
-
-# 5. Deploy to processing-server
+# 4. Deploy to processing-server
 cp services.yml ../processing-server/src/main/resources/docs-metadata/
-cp validation-rules.yaml ../processing-server/src/main/resources/docs-metadata/
 ```
+
+**Note**: Business validation rules should be configured in Joget forms using native validation tools, not in configuration files.
 
 ### Option 2: Manual Configuration (3 hours)
 
@@ -296,43 +296,20 @@ Each service gets its own API endpoint:
 - `/api/govstack/v2/farmers_registry/applications`
 - `/api/govstack/v2/student_enrollment/applications`
 
-## Validation
+## Validation Approach
 
-### Business Rules Validation
+**This plugin does NOT perform business validation**. It only validates:
+- ✅ JSON structure is parseable
+- ✅ Metadata version compatibility (sender/receiver configuration sync)
+- ✅ Configuration matches database schema (at startup)
 
-The plugin enforces validation rules from `validation-rules.yaml`:
+**All functional/business validation is done in Joget forms** using native validation tools:
+- Required fields → Configure in form designer
+- Conditional requirements → Use Joget visibility/validation rules
+- Data format → Use Joget field validators
+- Business logic → Use Joget form validators
 
-```yaml
-validation_rules:
-  conditional_validations:
-    - condition: cropProduction == 'yes'
-      required_grids:
-        - cropManagement
-      min_entries: 1
-      message: At least 1 crop entry is required when crop production is 'yes'
-```
-
-### Testing Validation
-
-```bash
-# Submit test data
-curl -X POST http://localhost:8080/jw/api/govstack/v2/farmers_registry/applications \
-  -H "Content-Type: application/json" \
-  -d '{"resourceType":"Person","extension":{"agriculture":{"cropProduction":"yes"}}}'
-
-# Expected: 400 Bad Request with validation error message
-```
-
-### Validation Tool
-
-A comprehensive validation tool is available to verify data mapping:
-
-```bash
-cd /Users/aarelaponin/PycharmProjects/dev/gam/joget_validator
-./regenerate_and_validate.sh
-```
-
-See [Validation Tool Documentation](docs/VALIDATION_TOOL.md) for details.
+This separation ensures the plugin remains generic and service-agnostic.
 
 ## Testing
 
@@ -379,7 +356,7 @@ See [END_TO_END_SERVICE_CONFIGURATION.md](../END_TO_END_SERVICE_CONFIGURATION.md
 | **Field not mapping** | Check field name is exact match (case-sensitive) with Joget form field ID |
 | **Boolean field wrong** | Add field to `fieldNormalization.yesNo` or `oneTwo` in services.yml |
 | **Date format error** | Verify GovStack sends ISO8601 format: `2025-01-15T00:00:00Z` |
-| **Validation not triggering** | Check condition syntax in validation-rules.yaml matches field values exactly |
+| **Validation errors** | Check Joget form validators - all business validation is in forms, not plugin |
 | **API returns 404** | Verify URL: `/jw/api/govstack/v2/{serviceId}/applications` |
 
 ### Debug Logging
@@ -441,9 +418,10 @@ mvn clean package -Dmaven.test.skip=true
 ## Examples
 
 ### Working Example: Farmer Registry
-- **11 forms**, 104 fields, grid relationships, conditional validation
-- Configuration: `services.yml` (553 lines), `validation-rules.yaml` (27 lines)
+- **11 forms**, 104 fields, grid relationships
+- Configuration: `services.yml` (553 lines)
 - Test data: `test-data.json` (complete farmer registration)
+- Validation: Configured in Joget forms using native validators
 
 ### Additional Examples in Documentation
 See [END_TO_END_SERVICE_CONFIGURATION.md](../END_TO_END_SERVICE_CONFIGURATION.md) for:
@@ -453,15 +431,20 @@ See [END_TO_END_SERVICE_CONFIGURATION.md](../END_TO_END_SERVICE_CONFIGURATION.md
 
 ## Recent Updates
 
+**October 28, 2025**: Architecture cleanup - Transport layer only
+- Removed business validation from plugin (now in Joget forms)
+- Plugin validates structure/metadata only
+- Maintains generic, service-agnostic design
+- See [ARCHITECTURE.md](ARCHITECTURE.md) for design philosophy
+
 **October 6, 2025**: Configuration generator utilities added
-- Auto-generate services.yml and validation-rules.yaml (92% time savings)
+- Auto-generate services.yml configuration (92% time savings)
 - Single shared services.yml for both sender and receiver
 - See [GENERATOR_SUMMARY.md](../GENERATOR_SUMMARY.md) for details
 
 **September 25, 2025**: Major fixes to field mappings
 - Fixed 200+ field path mappings
 - Corrected table names and parent-child relationships
-- Added comprehensive validation framework
 - See [Field Mapping Fixes](docs/FIELD_MAPPING_FIXES.md) for details
 
 ## License
@@ -471,4 +454,4 @@ Part of the GovStack Registration Building Block initiative.
 ---
 
 **Version**: 8.1-SNAPSHOT
-**Last Updated**: October 6, 2025
+**Last Updated**: October 28, 2025

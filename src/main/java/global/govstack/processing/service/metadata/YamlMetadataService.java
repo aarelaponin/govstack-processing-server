@@ -210,6 +210,28 @@ public class YamlMetadataService {
     }
 
     /**
+     * Get the metadata version from service configuration
+     * @return The metadata version, or "unknown" if not specified
+     */
+    public String getMetadataVersion() {
+        if (serviceMetadata != null && serviceMetadata.containsKey("metadataVersion")) {
+            return (String) serviceMetadata.get("metadataVersion");
+        }
+        return "unknown";
+    }
+
+    /**
+     * Get the metadata compatibility range from service configuration
+     * @return The metadata compatibility range, or null if not specified
+     */
+    public String getMetadataCompatibility() {
+        if (serviceMetadata != null && serviceMetadata.containsKey("metadataCompatibility")) {
+            return (String) serviceMetadata.get("metadataCompatibility");
+        }
+        return null;
+    }
+
+    /**
      * Get the form ID from service metadata
      * @return The form ID, or the service ID if not specified
      */

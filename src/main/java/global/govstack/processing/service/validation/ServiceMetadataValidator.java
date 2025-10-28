@@ -216,6 +216,19 @@ public class ServiceMetadataValidator {
             return;
         }
 
+        // Skip column validation for grid/array fields (they don't have physical columns)
+        String transform = (String) field.get("transform");
+        if ("grid".equals(transform)) {
+            LogUtil.debug(CLASS_NAME, "Skipping column validation for grid field: " + sectionName + "." + jogetField);
+            return;
+        }
+
+        String type = (String) field.get("type");
+        if ("array".equals(type)) {
+            LogUtil.debug(CLASS_NAME, "Skipping column validation for array field: " + sectionName + "." + jogetField);
+            return;
+        }
+
         // Determine the expected column name
         String columnName = (String) field.get("column");
         if (columnName == null || columnName.isEmpty()) {
