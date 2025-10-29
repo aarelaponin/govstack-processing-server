@@ -1,28 +1,35 @@
-# GovStack Processing Server Plugin (ProcessingAPI)
+# GovStack Registration Receiver Plugin (ProcessingServer)
+
+**Version:** 8.1-SNAPSHOT
+**Package:** `global.govstack.registration.receiver`
+**Architecture:** Multi-Service Support
 
 A Joget DX8 plugin for GovStack Registration Building Block that receives GovStack JSON data via HTTP API, maps it to Joget forms, and saves it to the database. This plugin is a **transport layer** that handles data transformation between GovStack and Joget formats.
 
 ## Overview
 
-This plugin is the **receiver component** in a two-part architecture:
+This plugin is the **receiver component** in a three-part architecture:
+- **WorkflowActivator** (sender config) - Sets serviceId (single configuration point)
 - **DocSubmitter** (sender) - Extracts Joget form data, transforms to GovStack JSON, sends to Processing API
-- **ProcessingAPI** (this plugin) - Receives GovStack JSON, maps to Joget forms, saves to database
+- **ProcessingServer** (this plugin) - Receives GovStack JSON, maps to Joget forms, saves to database
 
-Together they enable bidirectional data exchange between Joget instances using GovStack Registration Building Block standards.
+Together they enable data exchange between Joget instances using GovStack Registration Building Block standards.
+
+**Key Feature**: Extracts serviceId from URL path (`/services/{serviceId}/applications`), enabling **one plugin to serve multiple services**.
 
 **Design Philosophy**: These plugins are **transport-layer only**. All business validation is done in Joget forms using native validation tools. The plugins validate only structure/metadata compliance, not business data.
 
 ## Features
 
-- **YAML-Driven Configuration** - All field mappings defined in `services.yml` (no code changes needed)
-- **HTTP API Endpoint** - `/api/govstack/v2/{serviceId}/applications` for receiving data
+- **Multi-Service Architecture** - One plugin serves multiple services (farmers, students, subsidies, etc.)
+- **ServiceId from URL Path** - Extracts serviceId from `/services/{serviceId}/applications` endpoint
+- **Convention-Based YAML Loading** - Automatically loads `{serviceId}.yml` configuration
+- **HTTP API Endpoint** - `/services/{serviceId}/applications` for receiving data
+- **YAML-Driven Configuration** - All field mappings defined in YAML files (no code changes needed)
 - **Automatic Field Transformation** - Handles dates, numbers, checkboxes, master data lookups
-- **Grid/Subform Support** - Processes parent-child relationships (farmer → crops, livestock)
+- **Grid/Subform Support** - Processes parent-child relationships (parent → children grids)
 - **Field Normalization** - Converts yes/no ↔ 1/2 formats automatically
-- **Metadata Version Validation** - Ensures sender/receiver configuration compatibility
-- **Generic Service Support** - Configure for ANY service type (farmers, students, patients, products)
 - **Configuration Generators** - Auto-generate configuration from minimal hints (92% time savings)
-- **Multi-Service Support** - Deploy multiple services to same Joget instance
 - **Hot-Deployable** - OSGi bundle architecture, no server restart required
 
 ## Requirements
@@ -55,7 +62,9 @@ The compiled plugin will be available at `target/processing-server-8.1-SNAPSHOT.
 
 Submit test data via API:
 ```bash
-curl -X POST http://localhost:8080/jw/api/govstack/v2/farmers_registry/applications \
+curl -X POST http://localhost:8080/jw/api/services/farmers_registry/applications \
+  -H "api_id: YOUR_API_ID" \
+  -H "api_key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d @src/main/resources/docs-metadata/test-data.json
 ```
@@ -69,11 +78,15 @@ Expected response:
 }
 ```
 
+**For complete configuration, see [CONFIGURATION_GUIDE.md](../CONFIGURATION_GUIDE.md)**
+
 ## API Endpoints
 
-### POST `/jw/api/govstack/v2/{serviceId}/applications`
+### POST `/jw/api/services/{serviceId}/applications`
 
 Receives GovStack JSON data and saves to Joget forms.
+
+**ServiceId is extracted from URL path** - enables multi-service support with one plugin.
 
 **Path Parameters:**
 - `serviceId` - Service identifier from services.yml (e.g., `farmers_registry`, `student_enrollment`)
@@ -103,13 +116,25 @@ Receives GovStack JSON data and saves to Joget forms.
 
 ## Configuration
 
-### Services Configuration (`services.yml`)
+### Multi-Service Architecture
 
-Single configuration file shared by both sender (DocSubmitter) and receiver (ProcessingAPI):
+**Key Concept**: One plugin JAR contains multiple YAML configuration files:
+- `farmers_registry.yml` - Configuration for farmers service
+- `subsidy_application.yml` - Configuration for subsidy service
+- `student_enrollment.yml` - Configuration for student service
+
+The plugin automatically loads the correct YAML based on `serviceId` extracted from the URL path.
+
+### Services Configuration (`{serviceId}.yml`)
+
+**File Location**: `src/main/resources/docs-metadata/{serviceId}.yml`
+**Naming Convention**: File name MUST match serviceId exactly
+
+**Example**: `farmers_registry.yml` (embedded in JAR)
 
 ```yaml
 service:
-  id: farmers_registry
+  id: farmers_registry  # MUST match file name
   name: Farmers Registry Service
 
 metadata:
@@ -129,6 +154,23 @@ formMappings:
         required: true
       - joget: first_name
         govstack: name.given[0]
+        required: true
+```
+
+**Example**: `subsidy_application.yml`
+
+```yaml
+service:
+  id: subsidy_application  # MUST match file name
+  name: Subsidy Application Service
+
+formMappings:
+  subsidyRequest:
+    formId: subsidyRequest
+    tableName: app_fd_subsidy_request
+    fields:
+      - joget: applicant_id
+        govstack: identifiers[0].value
         required: true
 ```
 
@@ -159,17 +201,17 @@ See [doc-submitter/README-GENERATORS.md](../doc-submitter/README-GENERATORS.md) 
 
 ```
 processing-server/
-├── src/main/java/global/govstack/processing/
-│   ├── api/ProcessingApiPlugin.java              # HTTP API endpoint handler
+├── src/main/java/global/govstack/registration/receiver/
+│   ├── lib/RegistrationServiceProvider.java      # HTTP API endpoint handler
 │   ├── service/
-│   │   ├── GovStackDataMapperV2.java             # Maps GovStack JSON to Joget forms
-│   │   ├── metadata/MetadataService.java         # Loads services.yml configuration
-│   │   ├── normalization/FieldNormalizer.java    # Transforms field values
-│   │   └── validation/ServiceMetadataValidator.java  # Validates config against DB schema
-│   └── lib/                                      # Utility libraries
+│   │   ├── GovStackRegistrationService.java      # Maps GovStack JSON to Joget forms
+│   │   └── metadata/
+│   │       ├── YamlMetadataService.java          # Loads {serviceId}.yml dynamically
+│   │       └── TableDataHandler.java             # Handles table operations
+│   └── exception/                                # Custom exceptions
 ├── src/main/resources/docs-metadata/
-│   ├── services.yml                               # Field mappings configuration (shared)
-│   ├── form_structure.yaml                        # Form metadata
+│   ├── farmers_registry.yml                       # Farmers service configuration
+│   ├── subsidy_application.yml                    # Subsidy service configuration (example)
 │   └── test-data.json                             # Test data
 ├── doc-forms/                                     # Joget form definitions (JSON)
 ├── docs/                                          # Documentation
@@ -199,32 +241,40 @@ processing-server/
 - **[Complete Fix Documentation](docs/FIXES_DOCUMENTATION.md)** - Detailed technical changes
 - **[Validation Tool](docs/VALIDATION_TOOL.md)** - Data validation framework
 
-## Architecture
+## Architecture (Multi-Service)
 
 ```
-Sender (port 8080-2, DB 3307)          Receiver (port 8080-1, DB 3306)
-┌─────────────────────────┐           ┌─────────────────────────┐
-│  Joget Form Submission  │           │    Processing API       │
-│         ↓               │           │    (this plugin)        │
-│    DocSubmitter         │           │         ↓               │
-│         ↓               │  HTTP     │   Validates JSON        │
-│  Read services.yml      │  POST     │         ↓               │
-│         ↓               │  ────→    │   Maps to Joget         │
-│  Extract form data      │  JSON     │  (read services.yml)    │
-│         ↓               │           │         ↓               │
-│  Transform to GovStack  │           │  Save to database       │
-│         ↓               │           │    (app_fd_* tables)    │
-│  Send HTTP POST         │           │                         │
-└─────────────────────────┘           └─────────────────────────┘
+Sender Joget Instance                Receiver Joget Instance
+┌──────────────────────────┐        ┌──────────────────────────┐
+│  Form Submission         │        │   ProcessingServer       │
+│         ↓                │        │   (this plugin)          │
+│  WorkflowActivator       │        │         ↓                │
+│  - Sets serviceId        │  HTTP  │   Extract serviceId      │
+│         ↓                │  POST  │   from URL path:         │
+│  Process Started         │  ────→ │   /services/{serviceId}  │
+│  (serviceId in workflow) │  JSON  │   /applications          │
+│         ↓                │        │         ↓                │
+│  DocSubmitter            │        │   Load {serviceId}.yml   │
+│  - Reads serviceId from  │        │   (e.g., farmers_        │
+│    workflow variables    │        │    registry.yml)         │
+│  - Loads {serviceId}.yml │        │         ↓                │
+│  - Sends to /services/   │        │   Map GovStack JSON      │
+│    {serviceId}/          │        │   to Joget forms         │
+│    applications          │        │         ↓                │
+│                          │        │   Save to database       │
+│                          │        │   (app_fd_* tables)      │
+└──────────────────────────┘        └──────────────────────────┘
 
-      Both use SAME services.yml (single source of truth)
+ServiceId flows: WorkflowActivator → Workflow var → DocSubmitter → URL path → ProcessingServer
+
+Multiple services use SAME plugins with DIFFERENT {serviceId}.yml files
 ```
 
 ## Form Mappings
 
-All field mappings are configured in `src/main/resources/docs-metadata/services.yml`
+All field mappings are configured in `src/main/resources/docs-metadata/{serviceId}.yml`
 
-### Farmer Registry Form Sections
+### Example: Farmer Registry Form Sections (farmers_registry.yml)
 - `farmerBasicInfo` - Basic farmer information (national_id, name, gender, etc.)
 - `farmerLocation` - Location and farm details (district, village, GPS coordinates)
 - `farmerAgriculture` - Agricultural activities (crop production, literacy, skills)
@@ -276,25 +326,35 @@ cp services.yml ../processing-server/src/main/resources/docs-metadata/
 
 See [END_TO_END_SERVICE_CONFIGURATION.md](../END_TO_END_SERVICE_CONFIGURATION.md) for complete manual process.
 
-## Multi-Service Deployment
+## Multi-Service Deployment (Single JAR Approach)
 
-Deploy multiple services to the same Joget instance by creating separate plugin projects:
+**Recommended**: Deploy ONE plugin JAR containing MULTIPLE YAML files:
 
 ```
-gs-plugins/
-├── processing-server-farmers/
-│   ├── pom.xml (artifactId: processing-server-farmers)
-│   └── src/main/resources/docs-metadata/services.yml (farmers_registry)
-├── processing-server-students/
-│   ├── pom.xml (artifactId: processing-server-students)
-│   └── src/main/resources/docs-metadata/services.yml (student_enrollment)
+processing-server-8.1-SNAPSHOT.jar
+├── (plugin code - generic)
+└── docs-metadata/
+    ├── farmers_registry.yml
+    ├── subsidy_application.yml
+    └── student_enrollment.yml
 ```
 
-Different artifactIds = different OSGi bundles = no conflicts.
+**Deployment Steps**:
+1. Add all `{serviceId}.yml` files to `src/main/resources/docs-metadata/`
+2. Build: `mvn clean package -Dmaven.test.skip=true`
+3. Deploy ONE JAR to Joget
+4. Plugin automatically creates API endpoints for each service:
+   - `/api/services/farmers_registry/applications`
+   - `/api/services/subsidy_application/applications`
+   - `/api/services/student_enrollment/applications`
 
-Each service gets its own API endpoint:
-- `/api/govstack/v2/farmers_registry/applications`
-- `/api/govstack/v2/student_enrollment/applications`
+**Benefits**:
+- Single plugin to maintain and deploy
+- All services share the same codebase
+- Easy to add new services (just add YAML file and rebuild)
+- No OSGi bundle conflicts
+
+**For complete configuration, see [CONFIGURATION_GUIDE.md](../CONFIGURATION_GUIDE.md)**
 
 ## Validation Approach
 
@@ -325,12 +385,18 @@ mvn clean package -Dmaven.test.skip=true
 
 # 2. Upload to Joget via UI or copy to app_plugins/
 
-# 3. Submit test data
-curl -X POST http://localhost:8080/jw/api/govstack/v2/farmers_registry/applications \
+# 3. Configure plugin with GovStack Mode enabled
+
+# 4. Generate API key in Joget (Settings → API Management → API Keys)
+
+# 5. Submit test data
+curl -X POST http://localhost:8080/jw/api/services/farmers_registry/applications \
+  -H "api_id: YOUR_API_ID" \
+  -H "api_key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d @src/main/resources/docs-metadata/test-data.json
 
-# 4. Check database
+# 6. Check database
 mysql -h localhost -P 3306 -u root -p jwdb \
   -e "SELECT * FROM app_fd_farmer_basic_data ORDER BY dateModified DESC LIMIT 1;"
 ```
@@ -350,31 +416,42 @@ See [END_TO_END_SERVICE_CONFIGURATION.md](../END_TO_END_SERVICE_CONFIGURATION.md
 
 | Issue | Solution |
 |-------|----------|
-| **"Service not found"** | Check `service.id` in services.yml matches URL path parameter |
-| **Mandatory fields empty** | Check field paths in services.yml match GovStack JSON structure exactly |
-| **Grid data not showing** | Verify `parentField`/`parentColumn` in services.yml (usually `c_farmer_id`) |
+| **"Service not found"** | Check `service.id` in `{serviceId}.yml` matches URL path parameter exactly |
+| **"Metadata file not found"** | Verify `{serviceId}.yml` exists in JAR: `jar tf processing-server-8.1-SNAPSHOT.jar \| grep yml` |
+| **API returns 404** | Verify URL format: `/jw/api/services/{serviceId}/applications` (not `/govstack/v2/`) |
+| **Mandatory fields empty** | Check field paths in `{serviceId}.yml` match GovStack JSON structure exactly |
+| **Grid data not showing** | Verify `parentField`/`parentColumn` in `{serviceId}.yml` (usually matches primary key) |
 | **Field not mapping** | Check field name is exact match (case-sensitive) with Joget form field ID |
-| **Boolean field wrong** | Add field to `fieldNormalization.yesNo` or `oneTwo` in services.yml |
+| **Boolean field wrong** | Add field to `fieldNormalization.yesNo` or `oneTwo` in `{serviceId}.yml` |
 | **Date format error** | Verify GovStack sends ISO8601 format: `2025-01-15T00:00:00Z` |
 | **Validation errors** | Check Joget form validators - all business validation is in forms, not plugin |
-| **API returns 404** | Verify URL: `/jw/api/govstack/v2/{serviceId}/applications` |
+| **HTTP 401 Unauthorized** | Verify API key is configured correctly in sender's DocSubmitter |
+
+**For detailed troubleshooting, see [CONFIGURATION_GUIDE.md](../CONFIGURATION_GUIDE.md#troubleshooting)**
 
 ### Debug Logging
 
 Check Joget logs for detailed error messages:
 ```bash
 # Joget console log
-tail -f [joget-home]/wflow/app_src/logs/console.log
+tail -f logs/joget.log | grep -E "(RegistrationServiceProvider|serviceId)"
+```
 
-# Look for ProcessingApiPlugin entries
-grep ProcessingApiPlugin [joget-home]/wflow/app_src/logs/console.log
+Expected logs:
+```
+INFO - Processing request for serviceId: farmers_registry
+INFO - Using GovStackRegistrationService for serviceId from URL: farmers_registry
+INFO - Loading metadata from classpath: docs-metadata/farmers_registry.yml
+INFO - Successfully loaded metadata for service: farmers_registry
+INFO - Processing GovStack JSON request
+INFO - Successfully processed request
 ```
 
 ### Enable Detailed Logging
 
 Add to Joget's log4j configuration for more details:
 ```properties
-log4j.logger.global.govstack.processing=DEBUG
+log4j.logger.global.govstack.registration.receiver=DEBUG
 ```
 
 ## Development
@@ -419,7 +496,7 @@ mvn clean package -Dmaven.test.skip=true
 
 ### Working Example: Farmer Registry
 - **11 forms**, 104 fields, grid relationships
-- Configuration: `services.yml` (553 lines)
+- Configuration: `farmers_registry.yml` (embedded in JAR)
 - Test data: `test-data.json` (complete farmer registration)
 - Validation: Configured in Joget forms using native validators
 
@@ -429,29 +506,35 @@ See [END_TO_END_SERVICE_CONFIGURATION.md](../END_TO_END_SERVICE_CONFIGURATION.md
 - **Patient Registration** - Healthcare registration with medical history
 - **Product Catalog** - Multi-category product management
 
-## Recent Updates
+## Version History
 
-**October 28, 2025**: Architecture cleanup - Transport layer only
-- Removed business validation from plugin (now in Joget forms)
-- Plugin validates structure/metadata only
-- Maintains generic, service-agnostic design
-- See [ARCHITECTURE.md](ARCHITECTURE.md) for design philosophy
+- **8.1-SNAPSHOT**: Current development version
+  - **Multi-Service Architecture** - Extracts serviceId from URL path parameter
+  - **Convention-Based YAML Loading** - Automatically loads `{serviceId}.yml`
+  - **API Endpoint Change** - `/govstack/v2/{serviceId}/` → `/services/{serviceId}/`
+  - **Package Renaming** - `global.govstack.processing` → `global.govstack.registration.receiver`
+  - **Generic Service Support** - Works for ANY service type (farmers, students, subsidies, etc.)
+  - **Dynamic Metadata Loading** - YamlMetadataService supports multiple services
+  - **Transport Layer Only** - Removed business validation (now in Joget forms)
+  - Configuration generators added (92% time savings)
+  - Major field mapping fixes (200+ corrections)
 
-**October 6, 2025**: Configuration generator utilities added
-- Auto-generate services.yml configuration (92% time savings)
-- Single shared services.yml for both sender and receiver
-- See [GENERATOR_SUMMARY.md](../GENERATOR_SUMMARY.md) for details
+## Documentation
 
-**September 25, 2025**: Major fixes to field mappings
-- Fixed 200+ field path mappings
-- Corrected table names and parent-child relationships
-- See [Field Mapping Fixes](docs/FIELD_MAPPING_FIXES.md) for details
+- **[CONFIGURATION_GUIDE.md](../CONFIGURATION_GUIDE.md)** - Complete deployment and configuration guide
+- **[GENERIC_CONFIGURATION.md](docs/GENERIC_CONFIGURATION.md)** - Multi-service configuration
+- **[END_TO_END_SERVICE_CONFIGURATION.md](../END_TO_END_SERVICE_CONFIGURATION.md)** - Complete walkthrough
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Transport-layer design philosophy
+- **[Documentation Index](docs/INDEX.md)** - Complete documentation index
 
 ## License
 
 Part of the GovStack Registration Building Block initiative.
+https://www.govstack.global
 
 ---
 
 **Version**: 8.1-SNAPSHOT
+**Package**: `global.govstack.registration.receiver`
 **Last Updated**: October 28, 2025
+**Architecture**: Multi-Service Support (Transport-Layer Only)
