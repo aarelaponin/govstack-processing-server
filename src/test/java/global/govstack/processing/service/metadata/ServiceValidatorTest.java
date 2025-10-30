@@ -1,6 +1,6 @@
 package global.govstack.processing.service.metadata;
 
-import global.govstack.processing.exception.InvalidRequestException;
+import global.govstack.registration.receiver.exception.InvalidRequestException;
 import org.junit.Test;
 import static org.junit.Assert.*;
 

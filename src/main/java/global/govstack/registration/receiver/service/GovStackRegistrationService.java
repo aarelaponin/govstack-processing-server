@@ -2,6 +2,7 @@ package global.govstack.registration.receiver.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import global.govstack.registration.receiver.exception.*;
+import global.govstack.registration.receiver.exception.ConfigurationException;
 import global.govstack.registration.receiver.service.metadata.*;
 import global.govstack.registration.receiver.service.validation.ServiceMetadataValidator;
 import org.joget.commons.util.LogUtil;
@@ -84,6 +85,7 @@ public class GovStackRegistrationService implements ApiRequestProcessor {
         }
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public JSONObject processRequest(String requestBody) throws ApiProcessingException {
         try {
@@ -206,6 +208,7 @@ public class GovStackRegistrationService implements ApiRequestProcessor {
      * Check metadata version compatibility between client and server
      * Logs a warning if versions don't match, but doesn't fail the request
      */
+    @SuppressWarnings("unchecked")
     private void checkMetadataVersionCompatibility(String requestBody) {
         try {
             ObjectMapper mapper = new ObjectMapper();

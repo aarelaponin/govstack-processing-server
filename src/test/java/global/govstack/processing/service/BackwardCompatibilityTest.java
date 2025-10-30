@@ -2,8 +2,8 @@ package global.govstack.processing.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import global.govstack.processing.service.metadata.*;
-import global.govstack.processing.service.normalization.*;
+import global.govstack.registration.receiver.service.metadata.*;
+import global.govstack.registration.receiver.service.normalization.*;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.Ignore;

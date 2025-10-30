@@ -1,5 +1,6 @@
 package global.govstack.processing.service.normalization;
 
+import global.govstack.registration.receiver.service.normalization.ValueFormatDetector;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.BooleanNode;

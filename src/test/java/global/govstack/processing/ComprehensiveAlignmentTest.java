@@ -1,6 +1,6 @@
 package global.govstack.processing;
 
-import global.govstack.processing.service.metadata.*;
+import global.govstack.registration.receiver.service.metadata.*;
 import global.govstack.processing.util.TestFieldHelper;
 import org.junit.Test;
 import org.junit.Before;

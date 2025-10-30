@@ -2,8 +2,8 @@ package global.govstack.processing.util;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import global.govstack.processing.service.metadata.YamlMetadataService;
-import global.govstack.processing.util.JsonPathExtractor;
+import global.govstack.registration.receiver.service.metadata.YamlMetadataService;
+import global.govstack.registration.receiver.util.JsonPathExtractor;
 import org.junit.Assert;
 
 import java.io.InputStream;

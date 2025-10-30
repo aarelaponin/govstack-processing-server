@@ -1,6 +1,9 @@
 package global.govstack.processing.service.metadata;
 
 import global.govstack.processing.util.TestFieldHelper;
+import global.govstack.registration.receiver.service.metadata.YamlMetadataService;
+import global.govstack.registration.receiver.service.metadata.DataTransformer;
+import global.govstack.registration.receiver.service.metadata.GovStackDataMapper;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.Ignore;

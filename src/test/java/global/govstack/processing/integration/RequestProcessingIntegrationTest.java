@@ -1,8 +1,8 @@
 package global.govstack.processing.integration;
 
-import global.govstack.processing.exception.ApiProcessingException;
-import global.govstack.processing.exception.InvalidRequestException;
-import global.govstack.processing.service.ApiRequestProcessor;
+import global.govstack.registration.receiver.exception.ApiProcessingException;
+import global.govstack.registration.receiver.exception.InvalidRequestException;
+import global.govstack.registration.receiver.service.ApiRequestProcessor;
 import org.json.JSONObject;
 import org.junit.Test;
 

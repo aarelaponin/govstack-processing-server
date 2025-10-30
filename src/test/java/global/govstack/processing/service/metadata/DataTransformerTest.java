@@ -1,5 +1,6 @@
 package global.govstack.processing.service.metadata;
 
+import global.govstack.registration.receiver.service.metadata.DataTransformer;
 import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.*;

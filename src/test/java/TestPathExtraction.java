@@ -1,6 +1,6 @@
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import global.govstack.processing.util.JsonPathExtractor;
+import global.govstack.registration.receiver.util.JsonPathExtractor;
 
 public class TestPathExtraction {
     public static void main(String[] args) throws Exception {

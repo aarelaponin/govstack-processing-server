@@ -1,6 +1,6 @@
 package global.govstack.processing;
 
-import global.govstack.processing.service.metadata.*;
+import global.govstack.registration.receiver.service.metadata.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 

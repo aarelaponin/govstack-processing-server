@@ -1,6 +1,6 @@
 package global.govstack.processing.api;
 
-import global.govstack.processing.exception.*;
+import global.govstack.registration.receiver.exception.*;
 import org.json.JSONObject;
 import org.junit.Test;
 
